@@ -1,0 +1,66 @@
+// ============================================================================
+// API LAYER INDEX
+// Re-export all API functions and hooks
+// ============================================================================
+
+// Mock API functions (for server components and direct calls)
+export {
+  setScenario,
+  getCurrentScenario,
+  fetchConnectors,
+  fetchConnector,
+  fetchEnabledConnectors,
+  testConnector,
+  fetchHosts,
+  fetchHost,
+  fetchHostsByCluster,
+  fetchHostsByStorageCluster,
+  fetchHotHosts,
+  fetchUnhealthyHosts,
+  fetchComputeClusters,
+  fetchComputeCluster,
+  fetchStorageClusters,
+  fetchStorageCluster,
+  fetchKubernetesClusters,
+  fetchKubernetesCluster,
+  fetchApplications,
+  fetchApplication,
+  fetchDashboards,
+  fetchDashboard,
+  fetchSavedViews,
+  fetchFleetOverview,
+  fetchCapabilities,
+  fetchStatPanel,
+  fetchTimeSeriesPanel,
+  fetchRankingPanel,
+  fetchFilterOptions,
+} from "./mock-api"
+
+// React hooks (for client components)
+export {
+  useConnectors,
+  useConnector,
+  useEnabledConnectors,
+  useHosts,
+  useHost,
+  useHostsByCluster,
+  useHotHosts,
+  useUnhealthyHosts,
+  useComputeClusters,
+  useComputeCluster,
+  useStorageClusters,
+  useStorageCluster,
+  useKubernetesClusters,
+  useKubernetesCluster,
+  useApplications,
+  useApplication,
+  useDashboards,
+  useDashboard,
+  useSavedViews,
+  useFleetOverview,
+  useCapabilities,
+  useStatPanel,
+  useTimeSeriesPanel,
+  useRankingPanel,
+  useFilterOptions,
+} from "./hooks"
