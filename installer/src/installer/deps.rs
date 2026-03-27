@@ -102,17 +102,38 @@ fn install_dependencies_online(config: &InstallConfig) -> Result<Vec<LogEntry>> 
 fn install_bun_online() -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
 
-    if !super::command_exists("bun") {
+    if find_bun_path().is_none() {
         logs.push(LogEntry::info("Installing Bun runtime..."));
-        let output =
-            super::run_command("bash", &["-c", "curl -fsSL https://bun.sh/install | bash"])?;
+
+        // Install bun to a predictable system-wide location
+        let install_script = r#"
+            export BUN_INSTALL=/usr/local
+            curl -fsSL https://bun.sh/install | bash
+        "#;
+
+        let output = super::run_sudo("bash", &["-c", install_script])?;
         if output.status.success() {
-            logs.push(LogEntry::success("Bun runtime installed"));
+            logs.push(LogEntry::success(
+                "Bun runtime installed to /usr/local/bin/",
+            ));
         } else {
+            // Fallback: install to user home, then copy to /usr/local/bin
+            logs.push(LogEntry::info(
+                "System install failed, trying user install + copy...",
+            ));
             let output =
-                super::run_sudo("bash", &["-c", "curl -fsSL https://bun.sh/install | bash"])?;
+                super::run_command("bash", &["-c", "curl -fsSL https://bun.sh/install | bash"])?;
             if output.status.success() {
-                logs.push(LogEntry::success("Bun runtime installed (via sudo)"));
+                // Find where it landed and copy to system path
+                if let Some(user_bun) = find_bun_path() {
+                    let _ = super::run_sudo("cp", &[&user_bun, "/usr/local/bin/bun"]);
+                    let _ = super::run_sudo("chmod", &["+x", "/usr/local/bin/bun"]);
+                    logs.push(LogEntry::success("Bun copied to /usr/local/bin/bun"));
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Bun install script succeeded but binary not found"
+                    ));
+                }
             } else {
                 return Err(anyhow::anyhow!("Failed to install Bun runtime"));
             }
@@ -121,12 +142,52 @@ fn install_bun_online() -> Result<Vec<LogEntry>> {
         logs.push(LogEntry::info("Bun runtime already installed"));
     }
 
-    if let Ok(output) = super::run_command("bun", &["--version"]) {
+    // Verify
+    if let Some(bun) = find_bun_path() {
+        let output = super::run_command(&bun, &["--version"])?;
         let version = super::output_to_string(&output);
-        logs.push(LogEntry::success(format!("Bun v{} verified", version)));
+        logs.push(LogEntry::success(format!("Bun v{} at {}", version, bun)));
     }
 
     Ok(logs)
+}
+
+/// Search all common bun locations. Returns the full path if found.
+fn find_bun_path() -> Option<String> {
+    let candidates = ["/usr/local/bin/bun", "/usr/bin/bun"];
+    for path in &candidates {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+
+    // Check current user's home
+    if let Ok(home) = std::env::var("HOME") {
+        let p = format!("{}/.bun/bin/bun", home);
+        if std::path::Path::new(&p).exists() {
+            return Some(p);
+        }
+    }
+
+    // Check SUDO_USER's home (when running under sudo)
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if let Ok(output) = super::run_command("getent", &["passwd", &sudo_user]) {
+            let line = super::output_to_string(&output);
+            if let Some(home) = line.split(':').nth(5) {
+                let p = format!("{}/.bun/bin/bun", home);
+                if std::path::Path::new(&p).exists() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    // Check if `bun` is on PATH
+    if super::command_exists("bun") {
+        return Some("bun".to_string());
+    }
+
+    None
 }
 
 // ── Airgap (Offline) Install ─────────────────────────────────────────────────

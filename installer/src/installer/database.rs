@@ -5,21 +5,76 @@ use crate::app::{InstallConfig, LogEntry};
 pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
 
-    // Initialize PostgreSQL if needed (RHEL/Fedora)
+    // Initialize PostgreSQL cluster if needed
+    // On RHEL/Fedora: postgresql-setup --initdb
     if super::command_exists("postgresql-setup") {
-        logs.push(LogEntry::info(
-            "Initializing PostgreSQL database cluster...",
-        ));
+        logs.push(LogEntry::info("Initializing PostgreSQL cluster (RHEL)..."));
         let _ = super::run_sudo("postgresql-setup", &["--initdb"]);
+    }
+
+    // On Debian/Ubuntu: pg_createcluster if no cluster exists yet
+    // This is needed after fresh .deb install (including airgap)
+    if super::command_exists("pg_lsclusters") {
+        let output = super::run_command("pg_lsclusters", &["--no-header"])?;
+        let clusters = super::output_to_string(&output);
+        if clusters.trim().is_empty() {
+            logs.push(LogEntry::info(
+                "No PostgreSQL cluster found, creating one...",
+            ));
+            // Detect installed PG version
+            let ver_output = super::run_command("ls", &["/usr/lib/postgresql/"])?;
+            let ver_str = super::output_to_string(&ver_output);
+            let version = ver_str
+                .lines()
+                .rfind(|l| !l.is_empty())
+                .unwrap_or("16")
+                .trim()
+                .to_string();
+            logs.push(LogEntry::info(format!(
+                "Detected PostgreSQL version: {}",
+                version
+            )));
+            let output = super::run_sudo("pg_createcluster", &[&version, "main", "--start"])?;
+            if output.status.success() {
+                logs.push(LogEntry::success("PostgreSQL cluster created and started"));
+            } else {
+                logs.push(LogEntry::warning(
+                    "pg_createcluster had issues, trying to start anyway",
+                ));
+            }
+        } else {
+            logs.push(LogEntry::info(format!(
+                "Existing cluster(s): {}",
+                clusters.trim()
+            )));
+        }
     }
 
     // Start and enable PostgreSQL
     logs.push(LogEntry::info("Starting PostgreSQL service..."));
     let output = super::run_sudo("systemctl", &["start", "postgresql"])?;
     if !output.status.success() {
-        return Err(anyhow::anyhow!("Failed to start PostgreSQL"));
+        // Try starting with specific version (Debian pattern: postgresql@16-main)
+        let stderr = super::output_stderr(&output);
+        logs.push(LogEntry::warning(format!(
+            "systemctl start postgresql failed: {}",
+            stderr
+        )));
+        logs.push(LogEntry::info("Trying alternative service names..."));
+
+        // Try postgresql@*-main
+        let _ = super::run_sudo("systemctl", &["start", "postgresql@*-main"]);
+        // Check if it's actually running now
+        let check = super::run_command("pg_isready", &[]);
+        if check.map(|o| o.status.success()).unwrap_or(false) {
+            logs.push(LogEntry::success("PostgreSQL is running"));
+        } else {
+            return Err(anyhow::anyhow!(
+                "Failed to start PostgreSQL. Try: sudo systemctl start postgresql"
+            ));
+        }
     }
-    super::run_sudo("systemctl", &["enable", "postgresql"])?;
+    let _ = super::run_sudo("systemctl", &["enable", "postgresql"]);
     logs.push(LogEntry::success("PostgreSQL started and enabled"));
 
     // Generate password if not provided

@@ -140,9 +140,21 @@ fn find_bun_path() -> String {
     }
 
     if let Ok(home) = std::env::var("HOME") {
-        let home_bun = format!("{}/.bun/bin/bun", home);
-        if std::path::Path::new(&home_bun).exists() {
-            return home_bun;
+        let p = format!("{}/.bun/bin/bun", home);
+        if std::path::Path::new(&p).exists() {
+            return p;
+        }
+    }
+
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if let Ok(output) = super::run_command("getent", &["passwd", &sudo_user]) {
+            let line = super::output_to_string(&output);
+            if let Some(home) = line.split(':').nth(5) {
+                let p = format!("{}/.bun/bin/bun", home);
+                if std::path::Path::new(&p).exists() {
+                    return p;
+                }
+            }
         }
     }
 
