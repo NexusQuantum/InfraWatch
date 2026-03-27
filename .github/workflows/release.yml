@@ -1,0 +1,188 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            installer/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Check formatting
+        working-directory: installer
+        run: cargo fmt --check
+
+      - name: Run clippy
+        working-directory: installer
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        working-directory: installer
+        run: cargo test
+
+  build-gnu:
+    name: Build (GNU)
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            installer/target
+          key: ${{ runner.os }}-cargo-release-gnu-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Build release (GNU)
+        working-directory: installer
+        run: cargo build --release
+
+      - name: Verify binary
+        working-directory: installer
+        run: |
+          ls -la target/release/infrawatch-installer
+          file target/release/infrawatch-installer
+          ./target/release/infrawatch-installer --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrawatch-installer-x86_64-linux-gnu
+          path: installer/target/release/infrawatch-installer
+
+  build-musl:
+    name: Build (musl)
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            installer/target
+          key: ${{ runner.os }}-cargo-release-musl-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Build release (musl)
+        working-directory: installer
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Verify binary
+        working-directory: installer
+        run: |
+          ls -la target/x86_64-unknown-linux-musl/release/infrawatch-installer
+          file target/x86_64-unknown-linux-musl/release/infrawatch-installer
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrawatch-installer-x86_64-linux-musl
+          path: installer/target/x86_64-unknown-linux-musl/release/infrawatch-installer
+
+  create-release:
+    name: Create Release
+    needs: [build-gnu, build-musl]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download GNU artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: infrawatch-installer-x86_64-linux-gnu
+          path: artifacts/gnu
+
+      - name: Download musl artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: infrawatch-installer-x86_64-linux-musl
+          path: artifacts/musl
+
+      - name: Prepare release assets
+        run: |
+          chmod +x artifacts/gnu/infrawatch-installer
+          chmod +x artifacts/musl/infrawatch-installer
+          mv artifacts/gnu/infrawatch-installer artifacts/infrawatch-installer-x86_64-linux-gnu
+          mv artifacts/musl/infrawatch-installer artifacts/infrawatch-installer-x86_64-linux-musl
+          cp scripts/install.sh artifacts/install.sh
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            CHANGES=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGES=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## InfraWatch Installer ${{ github.ref_name }}
+
+            ### Quick Install
+            ```bash
+            curl -fsSL https://github.com/NexusQuantum/InfraWatch/releases/latest/download/install.sh | bash
+            ```
+
+            ### Manual Download
+            | Binary | Description |
+            |--------|-------------|
+            | `infrawatch-installer-x86_64-linux-gnu` | Standard Linux (requires glibc) |
+            | `infrawatch-installer-x86_64-linux-musl` | Portable Linux (statically linked) |
+
+            ### Changes
+            ${{ steps.changelog.outputs.changes }}
+          files: |
+            artifacts/infrawatch-installer-x86_64-linux-gnu
+            artifacts/infrawatch-installer-x86_64-linux-musl
+            artifacts/install.sh

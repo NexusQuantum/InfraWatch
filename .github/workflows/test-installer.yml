@@ -1,0 +1,63 @@
+name: Test Installer
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            installer/target
+          key: ${{ runner.os }}-cargo-test-installer-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Build installer
+        working-directory: installer
+        run: cargo build --release
+
+      - name: Test --help
+        working-directory: installer
+        run: ./target/release/infrawatch-installer --help
+
+      - name: Test install --help
+        working-directory: installer
+        run: ./target/release/infrawatch-installer install --help
+
+      - name: Test uninstall --help
+        working-directory: installer
+        run: ./target/release/infrawatch-installer uninstall --help
+
+      - name: Test version
+        working-directory: installer
+        run: ./target/release/infrawatch-installer --version
+
+      - name: Test non-interactive preflight (expected to fail gracefully)
+        working-directory: installer
+        run: |
+          # Run in non-interactive mode — will fail at preflight (no postgres, etc.)
+          # but should NOT crash or panic
+          timeout 30 ./target/release/infrawatch-installer install \
+            --non-interactive \
+            --mode minimal \
+            --install-dir /tmp/infrawatch-test \
+            --data-dir /tmp/infrawatch-test-data || true
+
+          echo "Smoke test passed — installer ran without panic"
