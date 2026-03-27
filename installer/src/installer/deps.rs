@@ -261,17 +261,31 @@ fn install_dependencies_airgap(config: &InstallConfig) -> Result<Vec<LogEntry>> 
 
     // Install Bun from bundle
     let bun_binary = bundle.join("bun");
-    if bun_binary.exists() && !super::command_exists("bun") {
-        logs.push(LogEntry::info("Installing Bun from bundle..."));
+    let system_bun = std::path::Path::new("/usr/local/bin/bun");
+
+    if system_bun.exists() {
+        logs.push(LogEntry::info("Bun already at /usr/local/bin/bun"));
+    } else if bun_binary.exists() {
+        logs.push(LogEntry::info(format!(
+            "Installing Bun from bundle ({})...",
+            bun_binary.display()
+        )));
         let output = super::run_sudo("cp", &[&bun_binary.to_string_lossy(), "/usr/local/bin/bun"])?;
         if output.status.success() {
             let _ = super::run_sudo("chmod", &["+x", "/usr/local/bin/bun"]);
-            logs.push(LogEntry::success("Bun runtime installed from bundle"));
+            logs.push(LogEntry::success("Bun installed to /usr/local/bin/bun"));
         } else {
-            return Err(anyhow::anyhow!("Failed to install Bun from bundle"));
+            let stderr = super::output_stderr(&output);
+            return Err(anyhow::anyhow!(
+                "Failed to copy bun to /usr/local/bin/bun: {}",
+                stderr
+            ));
         }
-    } else if super::command_exists("bun") {
-        logs.push(LogEntry::info("Bun runtime already installed"));
+    } else if find_bun_path().is_some() {
+        logs.push(LogEntry::info(format!(
+            "Bun found at: {}",
+            find_bun_path().unwrap()
+        )));
     } else {
         return Err(anyhow::anyhow!(
             "Bun binary not found in bundle at {} and not installed on system",
@@ -279,9 +293,21 @@ fn install_dependencies_airgap(config: &InstallConfig) -> Result<Vec<LogEntry>> 
         ));
     }
 
-    if let Ok(output) = super::run_command("bun", &["--version"]) {
+    // Verify bun actually works
+    let bun_loc = find_bun_path().unwrap_or_else(|| "/usr/local/bin/bun".to_string());
+    let output = super::run_command(&bun_loc, &["--version"])?;
+    if output.status.success() {
         let version = super::output_to_string(&output);
-        logs.push(LogEntry::success(format!("Bun v{} verified", version)));
+        logs.push(LogEntry::success(format!(
+            "Bun v{} at {}",
+            version, bun_loc
+        )));
+    } else {
+        return Err(anyhow::anyhow!(
+            "Bun at {} exists but failed to run: {}",
+            bun_loc,
+            super::output_stderr(&output)
+        ));
     }
 
     Ok(logs)
