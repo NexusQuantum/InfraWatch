@@ -83,12 +83,15 @@ jobs:
         run: bun --bun next build
 
       # ── Download Bun binary for bundle ────────────────────────────────
+      # Use baseline build (no AVX2) for maximum CPU compatibility
       - name: Download Bun binary
         run: |
-          curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip -o /tmp/bun.zip
+          curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip -o /tmp/bun.zip
           unzip -o /tmp/bun.zip -d /tmp/bun-extract
-          cp /tmp/bun-extract/bun-linux-x64/bun /tmp/bun-binary
+          cp /tmp/bun-extract/bun-linux-x64-baseline/bun /tmp/bun-binary
           chmod +x /tmp/bun-binary
+          file /tmp/bun-binary
+          /tmp/bun-binary --version
 
       # ── Download PostgreSQL .deb packages for offline install ─────────
       - name: Download PostgreSQL packages
