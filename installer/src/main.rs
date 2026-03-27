@@ -28,7 +28,7 @@ use installer::executor::InstallMessage;
 #[command(
     name = "infrawatch-installer",
     version,
-    about = "InfraWatch — Infrastructure Observability Dashboard Installer"
+    about = "NQRust-InfraWatch — Infrastructure Observability Dashboard Installer"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -462,7 +462,7 @@ fn start_installation(app: &mut App) {
 // ── Non-Interactive Mode ─────────────────────────────────────────────────────
 
 fn run_non_interactive(config: InstallConfig) -> Result<()> {
-    println!("InfraWatch Installer v{}", theme::VERSION);
+    println!("{} Installer v{}", theme::PRODUCT_NAME, theme::VERSION);
     println!("Mode: {}", config.mode.name());
     println!("Install directory: {}", config.install_dir.display());
     println!();

@@ -2,19 +2,19 @@ use ratatui::style::{Color, Modifier, Style};
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
 
-pub const PRIMARY: Color = Color::Rgb(6, 182, 212); // Cyan #06B6D4
+pub const PRIMARY: Color = Color::Rgb(255, 80, 1); // NQR Orange #FF5001
 pub const SUCCESS: Color = Color::Rgb(34, 197, 94); // Green #22C55E
 pub const WARNING: Color = Color::Rgb(234, 179, 8); // Yellow #EAB308
 pub const ERROR: Color = Color::Rgb(239, 68, 68); // Red #EF4444
 pub const INFO: Color = Color::Rgb(59, 130, 246); // Blue #3B82F6
 #[allow(dead_code)]
-pub const BACKGROUND: Color = Color::Rgb(15, 23, 42); // Slate #0F172A
-pub const FOREGROUND: Color = Color::Rgb(248, 250, 252); // Light #F8FAFC
+pub const BACKGROUND: Color = Color::Rgb(26, 26, 26); // Dark #1A1A1A
+pub const FOREGROUND: Color = Color::Rgb(252, 252, 252); // Light #FCFCFC
 #[allow(dead_code)]
-pub const CARD: Color = Color::Rgb(30, 41, 59); // Slate-800 #1E293B
-pub const BORDER: Color = Color::Rgb(51, 65, 85); // Slate-700 #334155
-pub const MUTED: Color = Color::Rgb(100, 116, 139); // Slate-500 #64748B
-pub const SECONDARY: Color = Color::Rgb(148, 163, 184); // Slate-400 #94A3B8
+pub const CARD: Color = Color::Rgb(53, 53, 53); // Dark Gray #353535
+pub const BORDER: Color = Color::Rgb(74, 74, 74); // Medium Gray #4A4A4A
+pub const MUTED: Color = Color::Rgb(107, 114, 128); // Dimmed #6B7280
+pub const SECONDARY: Color = Color::Rgb(156, 163, 175); // Light Gray #9CA3AF
 #[allow(dead_code)]
 pub const PURPLE: Color = Color::Rgb(168, 85, 247); // Purple #A855F7
 
@@ -95,18 +95,24 @@ pub mod styles {
 // ── Branding ─────────────────────────────────────────────────────────────────
 
 pub const LOGO: &str = r#"
-  ██╗███╗   ██╗███████╗██████╗  █████╗ ██╗    ██╗ █████╗ ████████╗ ██████╗██╗  ██╗
-  ██║████╗  ██║██╔════╝██╔══██╗██╔══██╗██║    ██║██╔══██╗╚══██╔══╝██╔════╝██║  ██║
-  ██║██╔██╗ ██║█████╗  ██████╔╝███████║██║ █╗ ██║███████║   ██║   ██║     ███████║
-  ██║██║╚██╗██║██╔══╝  ██╔══██╗██╔══██║██║███╗██║██╔══██║   ██║   ██║     ██╔══██║
-  ██║██║ ╚████║██║     ██║  ██║██║  ██║╚███╔███╔╝██║  ██║   ██║   ╚██████╗██║  ██║
-  ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝
+  ███╗   ██╗ ██████╗ ██████╗ ██╗   ██╗███████╗████████╗
+  ████╗  ██║██╔═══██╗██╔══██╗██║   ██║██╔════╝╚══██╔══╝
+  ██╔██╗ ██║██║   ██║██████╔╝██║   ██║███████╗   ██║
+  ██║╚██╗██║██║▄▄ ██║██╔══██╗██║   ██║╚════██║   ██║
+  ██║ ╚████║╚██████╔╝██║  ██║╚██████╔╝███████║   ██║
+  ╚═╝  ╚═══╝ ╚══▀▀═╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝
+        ██╗███╗   ██╗███████╗██████╗  █████╗ ██╗    ██╗ █████╗ ████████╗ ██████╗██╗  ██╗
+        ██║████╗  ██║██╔════╝██╔══██╗██╔══██╗██║    ██║██╔══██╗╚══██╔══╝██╔════╝██║  ██║
+        ██║██╔██╗ ██║█████╗  ██████╔╝███████║██║ █╗ ██║███████║   ██║   ██║     ███████║
+        ██║██║╚██╗██║██╔══╝  ██╔══██╗██╔══██║██║███╗██║██╔══██║   ██║   ██║     ██╔══██║
+        ██║██║ ╚████║██║     ██║  ██║██║  ██║╚███╔███╔╝██║  ██║   ██║   ╚██████╗██║  ██║
+        ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝
 "#;
 
 #[allow(dead_code)]
-pub const LOGO_COMPACT: &str = "━━━ InfraWatch ━━━";
+pub const LOGO_COMPACT: &str = "━━━ NQRust-InfraWatch ━━━";
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const PRODUCT_NAME: &str = "InfraWatch";
+pub const PRODUCT_NAME: &str = "NQRust-InfraWatch";
 pub const PRODUCT_DESCRIPTION: &str = "Infrastructure Observability Dashboard";
 pub const COMPANY_NAME: &str = "Nexus Quantum Tech";
