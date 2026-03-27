@@ -116,3 +116,25 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PRODUCT_NAME: &str = "NQRust-InfraWatch";
 pub const PRODUCT_DESCRIPTION: &str = "Infrastructure Observability Dashboard";
 pub const COMPANY_NAME: &str = "Nexus Quantum Tech";
+
+// ── Embedded License Configuration (baked in at build time via GitHub Secrets) ──
+
+pub const LICENSE_SERVER_URL: &str = match option_env!("LICENSE_SERVER_URL") {
+    Some(v) => v,
+    None => "https://billing.nexusquantum.id",
+};
+
+pub const LICENSE_API_KEY: &str = match option_env!("LICENSE_API_KEY") {
+    Some(v) => v,
+    None => "",
+};
+
+pub const LICENSE_GRACE_PERIOD_DAYS: &str = match option_env!("LICENSE_GRACE_PERIOD_DAYS") {
+    Some(v) => v,
+    None => "7",
+};
+
+pub const LICENSE_PUBLIC_KEY: &str = match option_env!("LICENSE_PUBLIC_KEY") {
+    Some(v) => v,
+    None => "",
+};

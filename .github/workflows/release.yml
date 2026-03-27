@@ -65,6 +65,11 @@ jobs:
 
       - name: Build release (GNU)
         working-directory: installer
+        env:
+          LICENSE_SERVER_URL: ${{ secrets.LICENSE_SERVER_URL }}
+          LICENSE_API_KEY: ${{ secrets.LICENSE_API_KEY }}
+          LICENSE_GRACE_PERIOD_DAYS: ${{ secrets.LICENSE_GRACE_PERIOD_DAYS }}
+          LICENSE_PUBLIC_KEY: ${{ secrets.LICENSE_PUBLIC_KEY }}
         run: cargo build --release
 
       - name: Verify binary
@@ -106,6 +111,11 @@ jobs:
 
       - name: Build release (musl)
         working-directory: installer
+        env:
+          LICENSE_SERVER_URL: ${{ secrets.LICENSE_SERVER_URL }}
+          LICENSE_API_KEY: ${{ secrets.LICENSE_API_KEY }}
+          LICENSE_GRACE_PERIOD_DAYS: ${{ secrets.LICENSE_GRACE_PERIOD_DAYS }}
+          LICENSE_PUBLIC_KEY: ${{ secrets.LICENSE_PUBLIC_KEY }}
         run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Verify binary

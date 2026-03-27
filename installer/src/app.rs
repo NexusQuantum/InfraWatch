@@ -259,7 +259,6 @@ pub struct InstallConfig {
     pub admin_username: String,
     pub admin_password: String,
     pub http_port: u16,
-    pub license_server_url: String,
     pub connector_encryption_key: String,
     #[allow(dead_code)]
     pub non_interactive: bool,
@@ -287,7 +286,6 @@ impl Default for InstallConfig {
             admin_username: "admin".to_string(),
             admin_password: String::new(),
             http_port: 3001,
-            license_server_url: "https://billing.nexusquantum.id".to_string(),
             connector_encryption_key: String::new(),
             non_interactive: false,
         }
@@ -296,7 +294,7 @@ impl Default for InstallConfig {
 
 // ── Config Field Names ───────────────────────────────────────────────────────
 
-pub const CONFIG_FIELDS: [&str; 12] = [
+pub const CONFIG_FIELDS: [&str; 11] = [
     "Install Directory",
     "Data Directory",
     "DB Host",
@@ -307,7 +305,6 @@ pub const CONFIG_FIELDS: [&str; 12] = [
     "Admin Username",
     "Admin Password",
     "HTTP Port",
-    "License Server URL",
     "Encryption Key",
 ];
 
@@ -336,8 +333,7 @@ impl InstallConfig {
                 }
             }
             9 => self.http_port.to_string(),
-            10 => self.license_server_url.clone(),
-            11 => {
+            10 => {
                 if self.connector_encryption_key.is_empty() {
                     "(auto-generate)".to_string()
                 } else {
@@ -364,8 +360,7 @@ impl InstallConfig {
             7 => self.admin_username.clone(),
             8 => self.admin_password.clone(),
             9 => self.http_port.to_string(),
-            10 => self.license_server_url.clone(),
-            11 => self.connector_encryption_key.clone(),
+            10 => self.connector_encryption_key.clone(),
             _ => String::new(),
         }
     }
@@ -390,8 +385,7 @@ impl InstallConfig {
                     self.http_port = port;
                 }
             }
-            10 => self.license_server_url = value,
-            11 => self.connector_encryption_key = value,
+            10 => self.connector_encryption_key = value,
             _ => {}
         }
     }

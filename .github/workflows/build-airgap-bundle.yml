@@ -68,6 +68,11 @@ jobs:
       # ── Build installer binary (static musl) ──────────────────────────
       - name: Build installer binary
         working-directory: installer
+        env:
+          LICENSE_SERVER_URL: ${{ secrets.LICENSE_SERVER_URL }}
+          LICENSE_API_KEY: ${{ secrets.LICENSE_API_KEY }}
+          LICENSE_GRACE_PERIOD_DAYS: ${{ secrets.LICENSE_GRACE_PERIOD_DAYS }}
+          LICENSE_PUBLIC_KEY: ${{ secrets.LICENSE_PUBLIC_KEY }}
         run: cargo build --release --target x86_64-unknown-linux-musl
 
       # ── Build InfraWatch app ──────────────────────────────────────────
