@@ -6,9 +6,16 @@ pub fn run_preflight_checks(config: &InstallConfig) -> Vec<CheckItem> {
         check_os(),
         check_memory(),
         check_disk_space(config),
-        check_required_commands(),
-        check_port_available(config.http_port, "HTTP"),
     ];
+
+    if config.is_airgap() {
+        checks.push(check_bundle_exists(config));
+    } else {
+        checks.push(check_required_commands());
+        checks.push(check_network_connectivity());
+    }
+
+    checks.push(check_port_available(config.http_port, "HTTP"));
     if config.mode.includes_database() {
         checks.push(check_port_available(config.db_port, "PostgreSQL"));
     }
@@ -153,5 +160,48 @@ fn check_root_or_sudo() -> CheckItem {
         )
     } else {
         CheckItem::error("Privileges", "Not root and sudo not found — run as root")
+    }
+}
+
+fn check_bundle_exists(config: &InstallConfig) -> CheckItem {
+    let bundle = &config.bundle_path;
+    if !bundle.exists() {
+        return CheckItem::error(
+            "Airgap Bundle",
+            format!("Bundle not found at {}", bundle.display()),
+        );
+    }
+
+    let has_app = bundle.join("app").join("package.json").exists()
+        || bundle.join("infrawatch").join("package.json").exists();
+
+    if has_app {
+        CheckItem::success("Airgap Bundle", format!("Found at {}", bundle.display()))
+    } else {
+        CheckItem::error(
+            "Airgap Bundle",
+            format!(
+                "Bundle at {} missing app/package.json — invalid bundle",
+                bundle.display()
+            ),
+        )
+    }
+}
+
+fn check_network_connectivity() -> CheckItem {
+    let required = ["curl", "git"];
+    let missing: Vec<&str> = required
+        .iter()
+        .filter(|cmd| !super::command_exists(cmd))
+        .copied()
+        .collect();
+
+    if missing.is_empty() {
+        CheckItem::success("Required Commands", "curl, git found")
+    } else {
+        CheckItem::error(
+            "Required Commands",
+            format!("Missing: {}", missing.join(", ")),
+        )
     }
 }

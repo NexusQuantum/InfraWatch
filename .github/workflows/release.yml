@@ -167,18 +167,67 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            ## InfraWatch Installer ${{ github.ref_name }}
+            ## NQRust-InfraWatch ${{ github.ref_name }}
 
-            ### Quick Install
+            Infrastructure Observability Dashboard by Nexus Quantum Tech.
+
+            ---
+
+            ### Quick Install (Online)
+
+            **One-liner** (downloads installer and runs the TUI):
             ```bash
             curl -fsSL https://github.com/NexusQuantum/InfraWatch/releases/latest/download/install.sh | bash
             ```
 
-            ### Manual Download
-            | Binary | Description |
-            |--------|-------------|
-            | `infrawatch-installer-x86_64-linux-gnu` | Standard Linux (requires glibc) |
-            | `infrawatch-installer-x86_64-linux-musl` | Portable Linux (statically linked) |
+            **Or download the installer binary directly:**
+            ```bash
+            # Download the static binary (works on any Linux distro)
+            curl -fsSL -o infrawatch-installer \
+              https://github.com/NexusQuantum/InfraWatch/releases/download/${{ github.ref_name }}/infrawatch-installer-x86_64-linux-musl
+            chmod +x infrawatch-installer
+
+            # Interactive TUI install
+            sudo ./infrawatch-installer install
+
+            # Non-interactive (scripted)
+            sudo ./infrawatch-installer install --non-interactive --mode full
+            ```
+
+            ### Offline / Air-Gapped Install
+
+            For environments without internet access, use the airgap bundle
+            (available from the **Build Airgap Bundle** workflow or as a release asset):
+
+            ```bash
+            # Transfer the .run file to the target machine, then:
+            chmod +x nqrust-infrawatch-airgap-${{ github.ref_name }}.run
+            sudo ./nqrust-infrawatch-airgap-${{ github.ref_name }}.run
+
+            # Or extract and install manually:
+            ./nqrust-infrawatch-airgap-${{ github.ref_name }}.run --noexec --target /opt/infrawatch-bundle
+            sudo /opt/infrawatch-bundle/infrawatch-installer install \
+              --airgap --bundle-path /opt/infrawatch-bundle
+            ```
+
+            ### Build from Source
+
+            ```bash
+            git clone https://github.com/NexusQuantum/InfraWatch.git
+            cd InfraWatch/installer
+            cargo build --release
+            sudo ./target/release/infrawatch-installer install
+            ```
+
+            ---
+
+            ### Binaries
+
+            | File | Description |
+            |------|-------------|
+            | `infrawatch-installer-x86_64-linux-musl` | **Recommended.** Static binary, works on any Linux x86_64 |
+            | `infrawatch-installer-x86_64-linux-gnu` | Dynamic binary (requires glibc 2.17+) |
+            | `install.sh` | Bootstrap script for one-liner install |
 
             ### Changes
             ${{ steps.changelog.outputs.changes }}

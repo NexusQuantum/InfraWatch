@@ -237,9 +237,18 @@ impl CheckItem {
 
 // ── Install Config ───────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InstallSource {
+    #[default]
+    Online,
+    Airgap,
+}
+
 #[derive(Debug, Clone)]
 pub struct InstallConfig {
     pub mode: InstallMode,
+    pub source: InstallSource,
+    pub bundle_path: PathBuf,
     pub install_dir: PathBuf,
     pub data_dir: PathBuf,
     pub db_host: String,
@@ -256,10 +265,18 @@ pub struct InstallConfig {
     pub non_interactive: bool,
 }
 
+impl InstallConfig {
+    pub fn is_airgap(&self) -> bool {
+        self.source == InstallSource::Airgap
+    }
+}
+
 impl Default for InstallConfig {
     fn default() -> Self {
         Self {
             mode: InstallMode::Full,
+            source: InstallSource::Online,
+            bundle_path: PathBuf::from("/opt/infrawatch-bundle"),
             install_dir: PathBuf::from("/opt/infrawatch"),
             data_dir: PathBuf::from("/var/lib/infrawatch"),
             db_host: "localhost".to_string(),

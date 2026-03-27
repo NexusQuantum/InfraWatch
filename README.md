@@ -76,15 +76,76 @@ A production-grade, multi-connector monitoring dashboard that aggregates metrics
 
 ---
 
-## Quick Start
+## Installation
 
-### One-Line Install (after first release)
+### Option 1: Quick Install (Online)
+
+One-liner that downloads the TUI installer and runs it:
 
 ```bash
 curl -fsSL https://github.com/NexusQuantum/InfraWatch/releases/latest/download/install.sh | bash
 ```
 
-### Manual Install
+Or download the installer binary directly:
+
+```bash
+# Download the static binary (works on any Linux x86_64)
+curl -fsSL -o infrawatch-installer \
+  https://github.com/NexusQuantum/InfraWatch/releases/latest/download/infrawatch-installer-x86_64-linux-musl
+chmod +x infrawatch-installer
+
+# Interactive TUI install (recommended)
+sudo ./infrawatch-installer install
+
+# Non-interactive (for scripted/automated installs)
+sudo ./infrawatch-installer install --non-interactive --mode full \
+  --db-password "your-secure-password" \
+  --admin-password "your-admin-password"
+```
+
+The installer will:
+1. Run preflight checks (OS, RAM, disk, ports)
+2. Install dependencies (PostgreSQL, Bun runtime)
+3. Set up the database (create user, database, grant privileges)
+4. Clone and build InfraWatch
+5. Generate `.env` configuration
+6. Create and start the `infrawatch` systemd service
+7. Verify everything is running
+
+### Option 2: Offline / Air-Gapped Install
+
+For environments without internet access, download the self-extracting airgap bundle from the [Releases](https://github.com/NexusQuantum/InfraWatch/releases) page:
+
+```bash
+# On a machine with internet, download the bundle:
+curl -fsSL -o nqrust-infrawatch-airgap-v0.1.0.run \
+  https://github.com/NexusQuantum/InfraWatch/releases/download/v0.1.0/nqrust-infrawatch-airgap-v0.1.0.run
+
+# Transfer the .run file to the target machine (USB, SCP, etc.)
+
+# On the target machine:
+chmod +x nqrust-infrawatch-airgap-v0.1.0.run
+sudo ./nqrust-infrawatch-airgap-v0.1.0.run
+```
+
+The airgap bundle includes:
+- Pre-built InfraWatch application (source + node_modules + .next build)
+- Bun runtime binary
+- PostgreSQL .deb packages (Ubuntu/Debian)
+- Static installer binary
+
+**Manual airgap extraction** (if you need to inspect the bundle first):
+
+```bash
+# Extract without running
+./nqrust-infrawatch-airgap-v0.1.0.run --noexec --target /opt/infrawatch-bundle
+
+# Run the installer manually
+sudo /opt/infrawatch-bundle/infrawatch-installer install \
+  --airgap --bundle-path /opt/infrawatch-bundle
+```
+
+### Option 3: Build from Source
 
 ```bash
 # 1. Clone
@@ -105,15 +166,21 @@ bun --bun next build
 bun --bun next start --port 3001
 ```
 
-### Using the TUI Installer
+### Option 4: Build the Installer from Source
 
 ```bash
-cd installer
+cd InfraWatch/installer
 cargo build --release
 sudo ./target/release/infrawatch-installer install
 ```
 
-The installer automates PostgreSQL setup, dependency installation, `.env` generation, systemd service creation, and post-install verification.
+### Uninstalling
+
+```bash
+sudo infrawatch-installer uninstall --force
+# Keep your data: --keep-data
+# Keep database:  --keep-database
+```
 
 ---
 
@@ -257,18 +324,33 @@ Welcome → Mode Select → Configuration → Preflight → Installation → Ver
 | **Minimal**   | External  | Production| No              |
 | **Development**| External | Dev mode  | No              |
 
+### Install Sources
+
+| Flag | Description |
+|------|-------------|
+| *(default)* | **Online** — clones repo from GitHub, downloads Bun, installs packages via apt/dnf |
+| `--airgap` | **Offline** — uses pre-built bundle from `--bundle-path` (no internet required) |
+
 ### Non-Interactive Mode
 
 ```bash
+# Online
 sudo ./infrawatch-installer install \
   --non-interactive \
   --mode full \
   --db-password "your-secure-password" \
   --admin-password "your-admin-password" \
   --http-port 3001
+
+# Offline / air-gapped
+sudo ./infrawatch-installer install \
+  --non-interactive \
+  --airgap \
+  --bundle-path /opt/infrawatch-bundle \
+  --mode full
 ```
 
-See `installer/README.md` or run `infrawatch-installer install --help` for all options.
+Run `infrawatch-installer install --help` for all options.
 
 ---
 

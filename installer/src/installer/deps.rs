@@ -46,6 +46,16 @@ impl PackageManager {
 }
 
 pub fn install_dependencies(config: &InstallConfig) -> Result<Vec<LogEntry>> {
+    if config.is_airgap() {
+        install_dependencies_airgap(config)
+    } else {
+        install_dependencies_online(config)
+    }
+}
+
+// ── Online Install ───────────────────────────────────────────────────────────
+
+fn install_dependencies_online(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
 
     // Detect package manager
@@ -84,6 +94,14 @@ pub fn install_dependencies(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     }
 
     // Install Bun
+    logs.append(&mut install_bun_online()?);
+
+    Ok(logs)
+}
+
+fn install_bun_online() -> Result<Vec<LogEntry>> {
+    let mut logs = Vec::new();
+
     if !super::command_exists("bun") {
         logs.push(LogEntry::info("Installing Bun runtime..."));
         let output =
@@ -91,7 +109,6 @@ pub fn install_dependencies(config: &InstallConfig) -> Result<Vec<LogEntry>> {
         if output.status.success() {
             logs.push(LogEntry::success("Bun runtime installed"));
         } else {
-            // Try with sudo
             let output =
                 super::run_sudo("bash", &["-c", "curl -fsSL https://bun.sh/install | bash"])?;
             if output.status.success() {
@@ -104,7 +121,103 @@ pub fn install_dependencies(config: &InstallConfig) -> Result<Vec<LogEntry>> {
         logs.push(LogEntry::info("Bun runtime already installed"));
     }
 
-    // Verify bun is accessible
+    if let Ok(output) = super::run_command("bun", &["--version"]) {
+        let version = super::output_to_string(&output);
+        logs.push(LogEntry::success(format!("Bun v{} verified", version)));
+    }
+
+    Ok(logs)
+}
+
+// ── Airgap (Offline) Install ─────────────────────────────────────────────────
+
+fn install_dependencies_airgap(config: &InstallConfig) -> Result<Vec<LogEntry>> {
+    let mut logs = Vec::new();
+    let bundle = &config.bundle_path;
+
+    logs.push(LogEntry::info(format!(
+        "Airgap mode: using bundle at {}",
+        bundle.display()
+    )));
+
+    if !bundle.exists() {
+        return Err(anyhow::anyhow!(
+            "Bundle directory not found: {}",
+            bundle.display()
+        ));
+    }
+
+    // Install .deb/.rpm packages from bundle if present
+    let debs_dir = bundle.join("debs");
+    let rpms_dir = bundle.join("rpms");
+
+    if debs_dir.exists() {
+        logs.push(LogEntry::info("Installing bundled .deb packages..."));
+        let output = super::run_sudo(
+            "bash",
+            &[
+                "-c",
+                &format!(
+                    "dpkg -i {}/*.deb 2>/dev/null; apt-get install -f -y",
+                    debs_dir.display()
+                ),
+            ],
+        )?;
+        if output.status.success() {
+            logs.push(LogEntry::success("Bundled .deb packages installed"));
+        } else {
+            logs.push(LogEntry::warning(
+                "Some .deb packages may have failed — continuing",
+            ));
+        }
+    } else if rpms_dir.exists() {
+        logs.push(LogEntry::info("Installing bundled .rpm packages..."));
+        let rpm_cmd = if super::command_exists("dnf") {
+            "dnf"
+        } else {
+            "yum"
+        };
+        let output = super::run_sudo(
+            rpm_cmd,
+            &[
+                "localinstall",
+                "-y",
+                &format!("{}/*.rpm", rpms_dir.display()),
+            ],
+        )?;
+        if output.status.success() {
+            logs.push(LogEntry::success("Bundled .rpm packages installed"));
+        } else {
+            logs.push(LogEntry::warning(
+                "Some .rpm packages may have failed — continuing",
+            ));
+        }
+    } else {
+        logs.push(LogEntry::info(
+            "No bundled OS packages found — assuming dependencies are pre-installed",
+        ));
+    }
+
+    // Install Bun from bundle
+    let bun_binary = bundle.join("bun");
+    if bun_binary.exists() && !super::command_exists("bun") {
+        logs.push(LogEntry::info("Installing Bun from bundle..."));
+        let output = super::run_sudo("cp", &[&bun_binary.to_string_lossy(), "/usr/local/bin/bun"])?;
+        if output.status.success() {
+            let _ = super::run_sudo("chmod", &["+x", "/usr/local/bin/bun"]);
+            logs.push(LogEntry::success("Bun runtime installed from bundle"));
+        } else {
+            return Err(anyhow::anyhow!("Failed to install Bun from bundle"));
+        }
+    } else if super::command_exists("bun") {
+        logs.push(LogEntry::info("Bun runtime already installed"));
+    } else {
+        return Err(anyhow::anyhow!(
+            "Bun binary not found in bundle at {} and not installed on system",
+            bun_binary.display()
+        ));
+    }
+
     if let Ok(output) = super::run_command("bun", &["--version"]) {
         let version = super::output_to_string(&output);
         logs.push(LogEntry::success(format!("Bun v{} verified", version)));

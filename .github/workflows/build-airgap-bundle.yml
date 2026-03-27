@@ -1,0 +1,166 @@
+name: Build Airgap Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. v0.1.0)"
+        required: true
+        type: string
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+env:
+  CARGO_TERM_COLOR: always
+  BUN_VERSION: "1.3.2"
+
+permissions:
+  contents: write
+
+jobs:
+  build-bundle:
+    name: Build Airgap Bundle
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || echo 'latest')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools makeself
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            installer/target
+          key: ${{ runner.os }}-cargo-airgap-${{ hashFiles('installer/Cargo.lock') }}
+
+      # ── Build installer binary (static musl) ──────────────────────────
+      - name: Build installer binary
+        working-directory: installer
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      # ── Build InfraWatch app ──────────────────────────────────────────
+      - name: Install app dependencies
+        run: bun install
+
+      - name: Build Next.js app
+        run: bun --bun next build
+
+      # ── Download Bun binary for bundle ────────────────────────────────
+      - name: Download Bun binary
+        run: |
+          curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip -o /tmp/bun.zip
+          unzip -o /tmp/bun.zip -d /tmp/bun-extract
+          cp /tmp/bun-extract/bun-linux-x64/bun /tmp/bun-binary
+          chmod +x /tmp/bun-binary
+
+      # ── Download PostgreSQL .deb packages for offline install ─────────
+      - name: Download PostgreSQL packages
+        run: |
+          mkdir -p /tmp/debs
+          cd /tmp/debs
+          apt-get download postgresql postgresql-common postgresql-16 \
+            postgresql-client-16 postgresql-client-common libpq5 \
+            ssl-cert 2>/dev/null || true
+          ls -la /tmp/debs/
+
+      # ── Assemble bundle directory ─────────────────────────────────────
+      - name: Assemble bundle
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          BUNDLE_DIR="/tmp/infrawatch-bundle"
+          mkdir -p "${BUNDLE_DIR}/app"
+
+          # Copy pre-built app (source + node_modules + .next build)
+          rsync -a --exclude='installer' --exclude='.git' --exclude='.github' \
+            ./ "${BUNDLE_DIR}/app/"
+
+          # Copy installer binary
+          cp installer/target/x86_64-unknown-linux-musl/release/infrawatch-installer \
+            "${BUNDLE_DIR}/infrawatch-installer"
+          chmod +x "${BUNDLE_DIR}/infrawatch-installer"
+
+          # Copy Bun binary
+          cp /tmp/bun-binary "${BUNDLE_DIR}/bun"
+
+          # Copy PostgreSQL packages
+          cp -r /tmp/debs "${BUNDLE_DIR}/debs"
+
+          # Create setup script inside bundle
+          cat > "${BUNDLE_DIR}/setup.sh" << 'SETUP_EOF'
+          #!/usr/bin/env bash
+          set -e
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+          echo ""
+          echo "NQRust-InfraWatch Offline Installer"
+          echo "===================================="
+          echo ""
+          echo "Bundle: ${SCRIPT_DIR}"
+          echo ""
+          exec sudo "${SCRIPT_DIR}/infrawatch-installer" install \
+            --airgap \
+            --bundle-path "${SCRIPT_DIR}" \
+            "$@"
+          SETUP_EOF
+          chmod +x "${BUNDLE_DIR}/setup.sh"
+
+          # Create VERSION file
+          echo "${VERSION}" > "${BUNDLE_DIR}/VERSION"
+
+          # Show bundle contents
+          echo "=== Bundle contents ==="
+          du -sh "${BUNDLE_DIR}"
+          ls -la "${BUNDLE_DIR}/"
+          du -sh "${BUNDLE_DIR}/app"
+
+      # ── Create self-extracting .run archive ───────────────────────────
+      - name: Create self-extracting archive
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          makeself --gzip --sha256 \
+            /tmp/infrawatch-bundle \
+            "/tmp/nqrust-infrawatch-airgap-${VERSION}.run" \
+            "NQRust-InfraWatch ${VERSION} (Airgap Installer)" \
+            ./setup.sh
+
+          ls -lh /tmp/nqrust-infrawatch-airgap-${VERSION}.run
+
+      # ── Upload to release ─────────────────────────────────────────────
+      - name: Upload to release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          BUNDLE="/tmp/nqrust-infrawatch-airgap-${VERSION}.run"
+          gh release upload "${VERSION}" "${BUNDLE}" --clobber
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nqrust-infrawatch-airgap-bundle
+          path: /tmp/nqrust-infrawatch-airgap-*.run
+          retention-days: 30

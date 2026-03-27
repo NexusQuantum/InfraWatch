@@ -36,6 +36,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Install InfraWatch
     Install {
@@ -75,6 +76,14 @@ enum Commands {
         /// Non-interactive mode (use defaults, no TUI)
         #[arg(long)]
         non_interactive: bool,
+
+        /// Air-gapped install: use local bundle instead of downloading
+        #[arg(long, alias = "offline")]
+        airgap: bool,
+
+        /// Path to the airgap bundle directory
+        #[arg(long, default_value = "/opt/infrawatch-bundle")]
+        bundle_path: PathBuf,
     },
     /// Uninstall InfraWatch
     Uninstall {
@@ -125,9 +134,17 @@ fn main() -> Result<()> {
             admin_password,
             http_port,
             non_interactive,
+            airgap,
+            bundle_path,
         }) => {
             let config = InstallConfig {
                 mode: mode.into(),
+                source: if airgap {
+                    app::InstallSource::Airgap
+                } else {
+                    app::InstallSource::Online
+                },
+                bundle_path,
                 install_dir,
                 data_dir,
                 db_host,
