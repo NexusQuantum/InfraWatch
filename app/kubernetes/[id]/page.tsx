@@ -6,23 +6,23 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Container, ArrowLeft, AlertTriangle, CheckCircle, Box, Layers, Server } from "lucide-react";
+import { Container, ArrowLeft, AlertTriangle, CheckCircle, Layers, Server } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { CommandBar } from "@/components/layout/command-bar";
 import { TimeSeriesChart } from "@/components/charts/time-series-chart";
-import { kubernetesClusters } from "@/lib/mocks/clusters";
-import { hosts } from "@/lib/mocks/hosts";
+import { useKubernetesClusterTimeseries, useLiveKubernetesClusters, useLiveHosts } from "@/lib/api/live-hooks";
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
     healthy: "bg-status-healthy/10 text-status-healthy border-status-healthy/20",
     warning: "bg-status-warning/10 text-status-warning border-status-warning/20",
     critical: "bg-status-critical/10 text-status-critical border-status-critical/20",
+    down: "bg-status-down/10 text-status-down border-status-down/20",
+    unknown: "bg-muted text-muted-foreground border-border",
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium border ${variants[status] || "bg-muted"}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium border ${variants[status] || variants.unknown}`}>
       {status === "healthy" && <CheckCircle className="h-3.5 w-3.5" />}
       {(status === "warning" || status === "critical") && <AlertTriangle className="h-3.5 w-3.5" />}
       {status}
@@ -30,43 +30,36 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// Static chart data to avoid hydration mismatch
-const STATIC_RUNNING_PODS = [
-  { ts: "2026-03-26T08:00:00Z", value: 142 },
-  { ts: "2026-03-26T08:15:00Z", value: 145 },
-  { ts: "2026-03-26T08:30:00Z", value: 148 },
-  { ts: "2026-03-26T08:45:00Z", value: 152 },
-  { ts: "2026-03-26T09:00:00Z", value: 155 },
-  { ts: "2026-03-26T09:15:00Z", value: 151 },
-  { ts: "2026-03-26T09:30:00Z", value: 148 },
-  { ts: "2026-03-26T09:45:00Z", value: 145 },
-  { ts: "2026-03-26T10:00:00Z", value: 149 },
-  { ts: "2026-03-26T10:15:00Z", value: 153 },
-  { ts: "2026-03-26T10:30:00Z", value: 158 },
-  { ts: "2026-03-26T10:45:00Z", value: 154 },
-];
-
-const STATIC_UNHEALTHY_PODS = [
-  { ts: "2026-03-26T08:00:00Z", value: 3 },
-  { ts: "2026-03-26T08:15:00Z", value: 4 },
-  { ts: "2026-03-26T08:30:00Z", value: 3 },
-  { ts: "2026-03-26T08:45:00Z", value: 5 },
-  { ts: "2026-03-26T09:00:00Z", value: 4 },
-  { ts: "2026-03-26T09:15:00Z", value: 3 },
-  { ts: "2026-03-26T09:30:00Z", value: 2 },
-  { ts: "2026-03-26T09:45:00Z", value: 3 },
-  { ts: "2026-03-26T10:00:00Z", value: 4 },
-  { ts: "2026-03-26T10:15:00Z", value: 5 },
-  { ts: "2026-03-26T10:30:00Z", value: 4 },
-  { ts: "2026-03-26T10:45:00Z", value: 3 },
-];
-
 export default function KubernetesDetailPage() {
   const params = useParams();
   const clusterId = params.id as string;
+  const { clusters, meta: clustersMeta, isLoading, isError: isClustersError, error: clustersError } = useLiveKubernetesClusters();
+  const { hosts } = useLiveHosts();
+  const { data: timeseries, meta: timeseriesMeta, isError: isTimeseriesError, error: timeseriesError } =
+    useKubernetesClusterTimeseries(clusterId, "1h", "5m");
 
-  const cluster = useMemo(() => kubernetesClusters.find(c => c.id === clusterId), [clusterId]);
-  const clusterHosts = useMemo(() => hosts.filter(h => h.kubernetesClusterId === clusterId), [clusterId]);
+  const cluster = useMemo(() => clusters.find((c) => c.id === clusterId), [clusters, clusterId]);
+  const diagnostics =
+    isClustersError ||
+    isTimeseriesError ||
+    clustersMeta?.partial ||
+    timeseriesMeta?.partial ||
+    (clustersMeta?.errors?.length ?? 0) > 0 ||
+    (timeseriesMeta?.errors?.length ?? 0) > 0;
+  const clusterHosts = useMemo(() => {
+    if (!cluster) return [];
+    return hosts.filter((h) => cluster.connectorIds.includes(h.connectorId));
+  }, [cluster, hosts]);
+
+  if (isLoading && !cluster) {
+    return (
+      <AppShell>
+        <div className="p-6">
+          <Card className="p-4 text-sm text-muted-foreground">Loading Kubernetes cluster details...</Card>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (!cluster) {
     return (
@@ -87,15 +80,24 @@ export default function KubernetesDetailPage() {
     );
   }
 
+  const now = new Date().toISOString();
+  const runningPoints = timeseries?.running.length
+    ? timeseries.running
+    : [{ ts: now, value: Math.max(0, cluster.podCount - cluster.unhealthyPodCount) }];
+  const unhealthyPoints = timeseries?.unhealthy.length
+    ? timeseries.unhealthy
+    : [{ ts: now, value: cluster.unhealthyPodCount }];
+  const updatedAt = timeseries?.updatedAt || now;
+
   const podChartData = {
     type: "timeseries" as const,
-    title: "Pod Count Over Time",
+    title: "Pod Health",
     unit: "count" as const,
     series: [
-      { id: "running", name: "Running", points: STATIC_RUNNING_PODS },
-      { id: "unhealthy", name: "Unhealthy", status: "warning" as const, points: STATIC_UNHEALTHY_PODS },
+      { id: "running", name: "Running", points: runningPoints },
+      { id: "unhealthy", name: "Unhealthy", status: "warning" as const, points: unhealthyPoints },
     ],
-    updatedAt: "2026-03-26T10:45:00Z",
+    updatedAt,
     meta: { stacked: true },
   };
 
@@ -111,7 +113,24 @@ export default function KubernetesDetailPage() {
       </CommandBar>
 
       <div className="p-6 space-y-6">
-        {/* Header */}
+        {diagnostics && (
+          <Card className="p-4 border-status-warning/40">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 text-status-warning" />
+              <div className="space-y-1 text-sm">
+                <div className="font-medium">Data Source Diagnostics</div>
+                {clustersError && <div className="text-muted-foreground">{clustersError.message}</div>}
+                {timeseriesError && <div className="text-muted-foreground">{timeseriesError.message}</div>}
+                {clustersMeta?.errors?.map((msg) => (
+                  <div key={`clusters-${msg}`} className="text-muted-foreground">{msg}</div>
+                ))}
+                {timeseriesMeta?.errors?.map((msg) => (
+                  <div key={`ts-${msg}`} className="text-muted-foreground">{msg}</div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        )}
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-lg bg-muted">
             <Container className="h-6 w-6" />
@@ -131,7 +150,6 @@ export default function KubernetesDetailPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
           <Card className="p-4">
             <div className="text-xs text-muted-foreground">Nodes</div>
@@ -169,14 +187,12 @@ export default function KubernetesDetailPage() {
           </Card>
         </div>
 
-        {/* Charts */}
         <TimeSeriesChart data={podChartData} height={200} variant="area" />
 
-        {/* Nodes */}
         <Card className="p-4">
           <h3 className="text-sm font-medium mb-4">Cluster Nodes ({clusterHosts.length})</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {clusterHosts.map(host => (
+            {clusterHosts.map((host) => (
               <Link key={host.id} href={`/hosts/${host.id}`}>
                 <div className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent/5 transition-colors">
                   <Server className="h-4 w-4 text-muted-foreground" />
@@ -195,7 +211,6 @@ export default function KubernetesDetailPage() {
           </div>
         </Card>
 
-        {/* Related cluster */}
         {cluster.relatedComputeClusterId && (
           <Card className="p-4">
             <h3 className="text-sm font-medium mb-3">Related Infrastructure</h3>

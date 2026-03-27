@@ -32,7 +32,7 @@ export default function SettingsPage() {
     <AppShell>
       <CommandBar title="Settings" subtitle="Manage your preferences" />
 
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="w-full p-6 space-y-6">
         {/* Profile */}
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-6">

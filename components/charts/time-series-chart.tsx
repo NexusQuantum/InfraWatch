@@ -188,32 +188,32 @@ export function TimeSeriesChart({
       
       <ResponsiveContainer width="100%" height={height}>
         <ChartComponent data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
           <XAxis
             dataKey="ts"
             tickFormatter={formatTime}
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            stroke="hsl(var(--border))"
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+            stroke="var(--border)"
           />
           <YAxis
             tickFormatter={(v) => formatValue(v, chartUnit)}
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            stroke="hsl(var(--border))"
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+            stroke="var(--border)"
             domain={chartUnit === "percent" ? [0, 100] : ["auto", "auto"]}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(var(--popover))",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "var(--popover)",
+              border: "1px solid var(--border)",
               borderRadius: "6px",
               fontSize: 12,
-              color: "hsl(var(--popover-foreground))",
+              color: "var(--popover-foreground)",
             }}
             labelFormatter={formatTime}
             formatter={(value: number, name: string) => [formatValue(value, chartUnit), name]}
           />
           {showLegend && seriesNames.length > 1 && (
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10, color: "var(--muted-foreground)" }} />
           )}
           {seriesNames.map((seriesName, i) => {
             const color = COLORS[i % COLORS.length];

@@ -3,59 +3,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Datacenter Observability Dashboard - Dark Theme */
+/* NQRust-InfraWatch theme tokens */
 :root {
-  /* Dark theme by default for ops dashboards */
-  --background: oklch(0.12 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.16 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.14 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.95 0 0);
-  --primary-foreground: oklch(0.12 0.01 260);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.88 0 0);
-  --muted: oklch(0.20 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.22 0.01 260);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.25 0.01 260);
-  --input: oklch(0.20 0.01 260);
-  --ring: oklch(0.50 0.15 220);
-  
-  /* Status colors for observability */
-  --status-healthy: oklch(0.72 0.19 145);
-  --status-warning: oklch(0.80 0.18 85);
-  --status-critical: oklch(0.62 0.24 25);
-  --status-down: oklch(0.55 0.22 25);
-  --status-unknown: oklch(0.55 0 0);
-  --status-stale: oklch(0.60 0.12 60);
-  
-  /* Chart colors optimized for dark backgrounds */
-  --chart-1: oklch(0.70 0.18 220);
-  --chart-2: oklch(0.72 0.19 145);
-  --chart-3: oklch(0.80 0.18 85);
-  --chart-4: oklch(0.68 0.16 280);
-  --chart-5: oklch(0.65 0.20 30);
-  
-  --radius: 0.5rem;
-  
-  /* Sidebar */
-  --sidebar: oklch(0.10 0.01 260);
-  --sidebar-foreground: oklch(0.85 0 0);
-  --sidebar-primary: oklch(0.95 0 0);
-  --sidebar-primary-foreground: oklch(0.12 0.01 260);
-  --sidebar-accent: oklch(0.18 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.22 0.01 260);
-  --sidebar-ring: oklch(0.50 0.15 220);
-}
-
-/* Light theme variant if needed */
-.light {
   --background: oklch(0.98 0 0);
   --foreground: oklch(0.15 0 0);
   --card: oklch(1 0 0);
@@ -86,6 +35,7 @@
   --chart-3: oklch(0.70 0.20 85);
   --chart-4: oklch(0.55 0.18 280);
   --chart-5: oklch(0.55 0.22 30);
+  --radius: 0.5rem;
   --sidebar: oklch(0.97 0 0);
   --sidebar-foreground: oklch(0.15 0 0);
   --sidebar-primary: oklch(0.15 0 0);
@@ -93,6 +43,47 @@
   --sidebar-accent: oklch(0.95 0 0);
   --sidebar-accent-foreground: oklch(0.15 0 0);
   --sidebar-border: oklch(0.90 0 0);
+  --sidebar-ring: oklch(0.50 0.15 220);
+}
+
+.dark {
+  --background: oklch(0.12 0.01 260);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.16 0.01 260);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.14 0.01 260);
+  --popover-foreground: oklch(0.95 0 0);
+  --primary: oklch(0.95 0 0);
+  --primary-foreground: oklch(0.12 0.01 260);
+  --secondary: oklch(0.22 0.01 260);
+  --secondary-foreground: oklch(0.88 0 0);
+  --muted: oklch(0.20 0.01 260);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.22 0.01 260);
+  --accent-foreground: oklch(0.95 0 0);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.25 0.01 260);
+  --input: oklch(0.20 0.01 260);
+  --ring: oklch(0.50 0.15 220);
+  --status-healthy: oklch(0.72 0.19 145);
+  --status-warning: oklch(0.80 0.18 85);
+  --status-critical: oklch(0.62 0.24 25);
+  --status-down: oklch(0.55 0.22 25);
+  --status-unknown: oklch(0.55 0 0);
+  --status-stale: oklch(0.60 0.12 60);
+  --chart-1: oklch(0.70 0.18 220);
+  --chart-2: oklch(0.72 0.19 145);
+  --chart-3: oklch(0.80 0.18 85);
+  --chart-4: oklch(0.68 0.16 280);
+  --chart-5: oklch(0.65 0.20 30);
+  --sidebar: oklch(0.10 0.01 260);
+  --sidebar-foreground: oklch(0.85 0 0);
+  --sidebar-primary: oklch(0.95 0 0);
+  --sidebar-primary-foreground: oklch(0.12 0.01 260);
+  --sidebar-accent: oklch(0.18 0.01 260);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.22 0.01 260);
   --sidebar-ring: oklch(0.50 0.15 220);
 }
 

@@ -5,6 +5,7 @@
 export type EntityStatus = "healthy" | "warning" | "critical" | "down" | "unknown"
 export type ConnectorStatus = "healthy" | "degraded" | "down" | "misconfigured"
 export type AuthMode = "none" | "basic" | "bearer"
+export type ConnectorType = "nqrust_hypervisor" | "generic_prometheus" | "kubernetes_cluster"
 export type HostRole = "compute" | "storage" | "control-plane" | "app" | "mixed"
 
 // ============================================================================
@@ -27,9 +28,19 @@ export interface ConnectorCoverage {
   apps: number
 }
 
+export interface ConnectorTypeMeta {
+  key: ConnectorType
+  label: string
+  iconKey: "server" | "activity" | "container"
+  expectedCapabilities: Array<keyof ConnectorCapabilities>
+  quickFixTips: string[]
+}
+
 export interface Connector {
   id: string
   name: string
+  connectorType: ConnectorType
+  typeMeta?: ConnectorTypeMeta
   baseUrl: string
   environment: string
   site: string
@@ -42,6 +53,7 @@ export interface Connector {
   coverage: ConnectorCoverage
   authMode: AuthMode
   notes?: string
+  healthNotes?: string[]
 }
 
 // ============================================================================
@@ -60,8 +72,15 @@ export interface HostCurrentMetrics {
   networkRxBytesPerSec: number
   networkTxBytesPerSec: number
   networkErrorRate: number
+  cpuLogicalCount?: number
+  networkInterfaceCount?: number
   load1?: number
+  load5?: number
+  load15?: number
   uptimeSeconds?: number
+  diskIoUtilPct?: number
+  diskReadIops?: number
+  diskWriteIops?: number
 }
 
 export interface Host {
@@ -84,6 +103,81 @@ export interface Host {
   current: HostCurrentMetrics
 }
 
+export interface HostVmInventoryRow {
+  name?: string
+  namespace?: string
+  phase?: string
+  node?: string
+}
+
+export interface HostVmSummary {
+  runningVms: number
+  freeCpuCores: number
+  freeMemoryBytes: number
+  slots: {
+    small: number
+    medium: number
+    large: number
+  }
+  vmCpuRequestedCores: number
+  vmMemoryRequestedBytes: number
+  vmCpuRequestedPct: number
+  vmMemoryRequestedPct: number
+  inventory: HostVmInventoryRow[]
+  partialData: boolean
+  errors: string[]
+}
+
+export type VmStatus = "running" | "pending" | "stopped" | "failed" | "unknown"
+
+export interface VmListItem {
+  id: string
+  connectorId: string
+  name: string
+  namespace: string
+  node?: string
+  phase: string
+  status: VmStatus
+  cpuRequestedCores?: number
+  memoryRequestedBytes?: number
+}
+
+export interface VmDetail {
+  id: string
+  connectorId: string
+  name: string
+  namespace: string
+  node?: string
+  phase: string
+  status: VmStatus
+  cpuRequestedCores?: number
+  memoryRequestedBytes?: number
+  nodeAllocatableCpuCores?: number
+  nodeAllocatableMemoryBytes?: number
+  nodeFreeCpuCores?: number
+  nodeFreeMemoryBytes?: number
+  nodeFreeSlots?: {
+    small: number
+    medium: number
+    large: number
+  }
+  // Live KubeVirt metrics
+  cpuUsageCores?: number
+  memoryUsedBytes?: number
+  memoryAvailableBytes?: number
+  memoryDomainBytes?: number
+  networkRxBytesPerSec?: number
+  networkTxBytesPerSec?: number
+  storageReadIops?: number
+  storageWriteIops?: number
+  storageReadBytesPerSec?: number
+  storageWriteBytesPerSec?: number
+  vcpuDelaySec?: number
+  dirtyRateBytesPerSec?: number
+  disks?: Array<{ device: string; allocatedBytes: number }>
+  resourceLimits?: { cpuCores?: number; memoryBytes?: number }
+}
+
 // ============================================================================
 // COMPUTE CLUSTER
 // ============================================================================
@@ -93,6 +187,13 @@ export interface HotNode {
   hostname: string
   cpuUsagePct: number
   memoryUsagePct: number
+}
+
+export interface ComputeClusterVmHost {
+  hostId: string
+  hostName: string
+  runningVms: number
+  slotsMedium: number
 }
 
 export interface ComputeCluster {
@@ -107,9 +208,25 @@ export interface ComputeCluster {
   healthyNodeCount: number
   warningNodeCount: number
   criticalNodeCount: number
+  atRiskNodeCount?: number
   avgCpuUsagePct: number
   avgMemoryUsagePct: number
   avgDiskUsagePct: number
+  headroomCpuPct?: number
+  headroomMemoryPct?: number
+  pressureScore?: number
+  riskReasons?: string[]
+  vmRunningCount?: number
+  vmHostsWithVms?: number
+  vmEstimatedSlots?: {
+    small: number
+    medium: number
+    large: number
+  }
+  vmTopHosts?: ComputeClusterVmHost[]
+  networkRxBytesPerSec?: number
+  networkTxBytesPerSec?: number
+  networkErrorNodeCount?: number
   hottestNodes: HotNode[]
   relatedKubernetesClusterId?: string
 }
@@ -153,6 +270,26 @@ export interface StorageCluster {
   throughput: StorageThroughput
   degradedComponentsCount: number
   hottestNodes: HotStorageNode[]
+  // Longhorn volume details
+  scheduledBytes?: number
+  overcommitPct?: number
+  volumes?: Array<{
+    name: string
+    state: string
+    robustness: string
+    capacityBytes: number
+    actualSizeBytes: number
+    readIops: number
+    writeIops: number
+    readLatency: number
+    writeLatency: number
+  }>
+  volumeSummary?: {
+    total: number
+    healthy: number
+    degraded: number
+    faulted: number
+  }
 }
 
 // ============================================================================
@@ -295,6 +432,18 @@ export interface FleetHealthSummary {
   staleHosts: number
 }
 
+export interface FleetVmHostSummary {
+  hostId: string
+  hostName: string
+  connectorId: string
+  runningVms: number
+  freeCpuCores: number
+  freeMemoryBytes: number
+  slotsSmall: number
+  slotsMedium: number
+  slotsLarge: number
+}
+
 export interface FleetOverview {
   health: FleetHealthSummary
   capabilities: AggregatedCapabilities
@@ -317,6 +466,20 @@ export interface FleetOverview {
     total: number
     healthy: number
     degraded: number
+  }
+  vm: {
+    totalRunning: number
+    hostsWithVms: number
+    hostsWithCapacity: number
+    totalEstimatedSlots: {
+      small: number
+      medium: number
+      large: number
+    }
+    topVmDenseHosts: FleetVmHostSummary[]
+    topCapacityHosts: FleetVmHostSummary[]
+    partialData: boolean
+    errors: string[]
   }
   lastUpdatedAt: string
   partialData: boolean

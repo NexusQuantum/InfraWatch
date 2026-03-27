@@ -64,3 +64,25 @@ export {
   useRankingPanel,
   useFilterOptions,
 } from "./hooks"
+
+export { useResourceUtilization } from "./prometheus-hooks"
+export {
+  useLiveConnectors,
+  useLiveHosts,
+  useLiveComputeClusters,
+  useLiveStorageClusters,
+  useLiveKubernetesClusters,
+  useHostTimeseries,
+  useHostNetworkInterfaces,
+  useHostVm,
+  useLiveVms,
+  useLiveVm,
+  useComputeClusterTimeseries,
+  useStorageClusterTimeseries,
+  useKubernetesClusterTimeseries,
+  useLiveApplications,
+  useLiveOverview,
+  useApplicationTimeseries,
+  useLiveDashboards,
+  useVmTimeseries,
+} from "./live-hooks"

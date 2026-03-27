@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Loader2, AlertCircle, Server } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,19 +16,39 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => {
+        if (res.ok) router.replace("/");
+      })
+      .catch(() => {});
+  }, [router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
-    // Simulate login delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-    // Demo credentials
-    if (username === "admin" && password === "admin") {
-      router.push("/");
-    } else {
-      setError("Invalid username or password");
+      const data = await response.json();
+
+      if (response.ok) {
+        router.push("/");
+      } else if (response.status === 429) {
+        setError("Too many login attempts. Please try again later.");
+        setIsLoading(false);
+      } else {
+        setError(data.error || "Invalid username or password");
+        setIsLoading(false);
+      }
+    } catch {
+      setError("Unable to connect to server");
       setIsLoading(false);
     }
   };
@@ -37,10 +58,17 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo / Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 rounded-lg bg-muted mb-4">
-            <Server className="h-8 w-8" />
+          <div className="inline-flex items-center justify-center p-2 rounded-lg bg-muted mb-4">
+            <Image
+              src="/logo/nq-logo.png"
+              alt="NQRust-InfraWatch logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-sm"
+              priority
+            />
           </div>
-          <h1 className="text-xl font-semibold">Infrastructure Dashboard</h1>
+          <h1 className="text-xl font-semibold">NQRust-InfraWatch</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Datacenter Observability Platform
           </p>
@@ -117,12 +145,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          <div className="mt-6 pt-4 border-t border-border">
-            <p className="text-xs text-muted-foreground text-center">
-              Demo credentials: admin / admin
-            </p>
-          </div>
         </Card>
 
         {/* Footer */}

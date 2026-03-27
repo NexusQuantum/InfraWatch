@@ -53,6 +53,14 @@ const PROGRESS_BG: Record<string, string> = {
 
 function formatValue(value: number, unit?: string): string {
   if (unit === "%" || unit === "percent") return `${value.toFixed(1)}%`;
+  if (unit === "count") return `${Math.round(value)}`;
+  if (unit === "bytesPerSec") {
+    if (value >= 1e12) return `${(value / 1e12).toFixed(1)} TB/s`;
+    if (value >= 1e9) return `${(value / 1e9).toFixed(1)} GB/s`;
+    if (value >= 1e6) return `${(value / 1e6).toFixed(1)} MB/s`;
+    if (value >= 1e3) return `${(value / 1e3).toFixed(1)} KB/s`;
+    return `${value.toFixed(0)} B/s`;
+  }
   if (unit === "bytes") {
     if (value >= 1e12) return `${(value / 1e12).toFixed(1)} TB`;
     if (value >= 1e9) return `${(value / 1e9).toFixed(1)} GB`;

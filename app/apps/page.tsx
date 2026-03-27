@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Box, ArrowUpRight, AlertTriangle, Activity, Clock } from "lucide-react";
+import { Box, ArrowUpRight, Activity, AlertTriangle } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { CommandBar } from "@/components/layout/command-bar";
-import { applications } from "@/lib/mocks/clusters";
+import { useLiveApplications } from "@/lib/api/live-hooks";
 
 function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -20,6 +20,9 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function AppsPage() {
+  const { applications, meta, isLoading, isError, error } = useLiveApplications();
+  const diagnostics = isError || meta?.partial || (meta?.errors?.length ?? 0) > 0;
+
   const stats = {
     total: applications.length,
     healthy: applications.filter(a => a.status === "healthy").length,
@@ -32,6 +35,25 @@ export default function AppsPage() {
       <AppShell>
         <CommandBar title="Applications" />
         <div className="p-6">
+          {diagnostics && (
+            <Card className="p-4 mb-4 border-status-warning/40">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 text-status-warning" />
+                <div className="space-y-1 text-sm">
+                  <div className="font-medium">Data Source Diagnostics</div>
+                  {error && <div className="text-muted-foreground">{error.message}</div>}
+                  {meta?.errors?.map((msg) => (
+                    <div key={msg} className="text-muted-foreground">{msg}</div>
+                  ))}
+                  {meta?.failedConnectors?.length ? (
+                    <div className="text-muted-foreground">
+                      Failed connectors: {meta.failedConnectors.join(", ")}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          )}
           <Card className="p-12 text-center">
             <Box className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No Applications</h3>
@@ -53,6 +75,28 @@ export default function AppsPage() {
       />
 
       <div className="p-6 space-y-6">
+        {isLoading && (
+          <Card className="p-4 text-sm text-muted-foreground">Loading applications...</Card>
+        )}
+        {diagnostics && (
+          <Card className="p-4 border-status-warning/40">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 mt-0.5 text-status-warning" />
+              <div className="space-y-1 text-sm">
+                <div className="font-medium">Data Source Diagnostics</div>
+                {error && <div className="text-muted-foreground">{error.message}</div>}
+                {meta?.errors?.map((msg) => (
+                  <div key={msg} className="text-muted-foreground">{msg}</div>
+                ))}
+                {meta?.failedConnectors?.length ? (
+                  <div className="text-muted-foreground">
+                    Failed connectors: {meta.failedConnectors.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </Card>
+        )}
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4">
           <Card className="p-4">
