@@ -115,61 +115,108 @@ fn setup_application_airgap(
         ));
     };
 
+    // Check what the bundle has before copying
+    let bundle_has_modules = source.join("node_modules").exists();
+    let bundle_has_build = source.join(".next").exists();
     logs.push(LogEntry::info(format!(
-        "Airgap: copying app from {}",
-        source.display()
+        "Airgap bundle: node_modules={}, .next={}",
+        if bundle_has_modules { "yes" } else { "no" },
+        if bundle_has_build { "yes" } else { "no" },
     )));
+
     tx.send(InstallMessage::PhaseProgress(
         crate::app::Phase::AppSetup,
         "Copying application from bundle...".to_string(),
     ))?;
 
-    // Copy app to install dir if not already there
+    // Copy app to install dir
     if !install_dir.join("package.json").exists() {
         if !install_dir.exists() {
             std::fs::create_dir_all(install_dir)?;
         }
-        let output = super::run_command(
-            "cp",
-            &[
-                "-a",
-                &format!("{}/.", source.display()),
-                &install_dir.to_string_lossy(),
-            ],
-        )?;
-        if !output.status.success() {
-            // Try with sudo
-            let output = super::run_sudo(
+
+        // Use rsync for reliable recursive copy (handles symlinks in node_modules)
+        let copy_result = if super::command_exists("rsync") {
+            logs.push(LogEntry::info("Copying with rsync..."));
+            super::run_command(
+                "rsync",
+                &[
+                    "-a",
+                    &format!("{}/", source.display()),
+                    &format!("{}/", install_dir.display()),
+                ],
+            )
+        } else {
+            logs.push(LogEntry::info("Copying with cp..."));
+            super::run_command(
                 "cp",
                 &[
                     "-a",
-                    &format!("{}/.", source.display()),
+                    "-T",
+                    &source.to_string_lossy(),
                     &install_dir.to_string_lossy(),
                 ],
-            )?;
-            if !output.status.success() {
-                return Err(anyhow::anyhow!("Failed to copy app from bundle"));
+            )
+        };
+
+        match copy_result {
+            Ok(output) if output.status.success() => {
+                logs.push(LogEntry::success("Application copied from bundle"));
             }
+            Ok(output) => {
+                // Try with sudo
+                let stderr = super::output_stderr(&output);
+                logs.push(LogEntry::warning(format!(
+                    "Copy failed ({}), retrying with sudo...",
+                    stderr
+                )));
+                let output = super::run_sudo(
+                    "cp",
+                    &[
+                        "-a",
+                        "-T",
+                        &source.to_string_lossy(),
+                        &install_dir.to_string_lossy(),
+                    ],
+                )?;
+                if !output.status.success() {
+                    return Err(anyhow::anyhow!(
+                        "Failed to copy app from bundle: {}",
+                        super::output_stderr(&output)
+                    ));
+                }
+                logs.push(LogEntry::success(
+                    "Application copied from bundle (via sudo)",
+                ));
+            }
+            Err(e) => return Err(anyhow::anyhow!("Failed to copy app: {}", e)),
         }
-        logs.push(LogEntry::success("Application copied from bundle"));
     } else {
         logs.push(LogEntry::info("InfraWatch already present at install dir"));
     }
 
-    // Check if bundle has pre-built .next and node_modules
+    // Verify what was actually copied
     let has_node_modules = install_dir.join("node_modules").exists();
     let has_next_build = install_dir.join(".next").exists();
+    logs.push(LogEntry::info(format!(
+        "After copy: node_modules={}, .next={}",
+        if has_node_modules { "yes" } else { "no" },
+        if has_next_build { "yes" } else { "no" },
+    )));
 
-    if has_node_modules && has_next_build {
+    if has_node_modules && (has_next_build || config.mode.is_development()) {
         logs.push(LogEntry::success(
             "Bundle includes pre-built app — skipping bun install and build",
         ));
     } else if has_node_modules {
-        logs.push(LogEntry::info("node_modules present, building..."));
+        logs.push(LogEntry::info(
+            "node_modules present but no .next build, building...",
+        ));
         logs.append(&mut build_only(config, tx)?);
     } else {
-        logs.push(LogEntry::info(
-            "No pre-built node_modules — running bun install from bundle",
+        // This shouldn't happen with a proper airgap bundle, but handle it
+        logs.push(LogEntry::warning(
+            "Bundle missing node_modules — attempting bun install (requires network or cached packages)",
         ));
         logs.append(&mut install_and_build(config, tx)?);
     }
@@ -194,6 +241,25 @@ fn install_and_build(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Res
     let install_dir = &config.install_dir;
     let bun_path = find_bun();
 
+    // Verify bun exists before trying
+    logs.push(LogEntry::info(format!("Using bun at: {}", bun_path)));
+    let bun_check = super::run_command(&bun_path, &["--version"]);
+    match bun_check {
+        Ok(output) if output.status.success() => {
+            logs.push(LogEntry::info(format!(
+                "Bun version: {}",
+                super::output_to_string(&output)
+            )));
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Bun not found at '{}'. Searched: /usr/local/bin/bun, /usr/bin/bun, ~/.bun/bin/bun, $SUDO_USER home. \
+                 Install bun first: curl -fsSL https://bun.sh/install | bash",
+                bun_path
+            ));
+        }
+    }
+
     // bun install
     logs.push(LogEntry::info("Installing Node.js dependencies..."));
     tx.send(InstallMessage::PhaseProgress(
@@ -210,7 +276,15 @@ fn install_and_build(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Res
         logs.push(LogEntry::success("Dependencies installed"));
     } else {
         let stderr = super::output_stderr(&output);
-        return Err(anyhow::anyhow!("bun install failed: {}", stderr));
+        let stdout = super::output_to_string(&output);
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("exit code {}", output.status)
+        };
+        return Err(anyhow::anyhow!("bun install failed: {}", detail));
     }
 
     // Build
@@ -249,7 +323,12 @@ fn build_only(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<Vec
             logs.push(LogEntry::success("Production build complete"));
         } else {
             let stderr = super::output_stderr(&output);
-            return Err(anyhow::anyhow!("Production build failed: {}", stderr));
+            let detail = if !stderr.is_empty() {
+                stderr
+            } else {
+                format!("exit code {}", output.status)
+            };
+            return Err(anyhow::anyhow!("Production build failed: {}", detail));
         }
     } else {
         logs.push(LogEntry::info(
@@ -287,6 +366,14 @@ fn find_bun() -> String {
                     return p;
                 }
             }
+        }
+    }
+
+    // Last resort: check PATH
+    if let Ok(output) = super::run_command("which", &["bun"]) {
+        let path = super::output_to_string(&output);
+        if !path.is_empty() {
+            return path;
         }
     }
 
