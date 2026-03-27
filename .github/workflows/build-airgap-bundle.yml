@@ -26,13 +26,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch all tags
+        run: git fetch --tags --force
+
       - name: Determine version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "tag=${{ inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "tag=$(git describe --tags --abbrev=0 2>/dev/null || echo 'latest')" >> $GITHUB_OUTPUT
+            TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -z "$TAG" ]; then
+              echo "::error::No tags found — cannot determine release version"
+              exit 1
+            fi
+            echo "tag=${TAG}" >> $GITHUB_OUTPUT
           fi
 
       - name: Install Rust toolchain
@@ -148,17 +156,18 @@ jobs:
 
           ls -lh /tmp/nqrust-infrawatch-airgap-${VERSION}.run
 
-      # ── Upload to release ─────────────────────────────────────────────
+      # ── Attach to GitHub Release ────────────────────────────────────
       - name: Upload to release
-        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.tag }}"
           BUNDLE="/tmp/nqrust-infrawatch-airgap-${VERSION}.run"
+          echo "Uploading ${BUNDLE} to release ${VERSION}..."
           gh release upload "${VERSION}" "${BUNDLE}" --clobber
+          echo "✓ Attached to release ${VERSION}"
 
-      - name: Upload artifact
+      - name: Upload artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: nqrust-infrawatch-airgap-bundle
