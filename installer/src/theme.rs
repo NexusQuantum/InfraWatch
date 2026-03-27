@@ -126,7 +126,7 @@ pub const LICENSE_SERVER_URL: &str = match option_env!("LICENSE_SERVER_URL") {
 
 pub const LICENSE_API_KEY: &str = match option_env!("LICENSE_API_KEY") {
     Some(v) => v,
-    None => "",
+    None => "pk_live_RiTXxEttxQWgH3usHAVZjAMD0JBJb2P5KxS81qUk",
 };
 
 pub const LICENSE_GRACE_PERIOD_DAYS: &str = match option_env!("LICENSE_GRACE_PERIOD_DAYS") {
@@ -136,5 +136,5 @@ pub const LICENSE_GRACE_PERIOD_DAYS: &str = match option_env!("LICENSE_GRACE_PER
 
 pub const LICENSE_PUBLIC_KEY: &str = match option_env!("LICENSE_PUBLIC_KEY") {
     Some(v) => v,
-    None => "",
+    None => "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAupcIIOQicInO2h3mlI7Kx8LYp0b8y3UKm0pca00Gzc4=\n-----END PUBLIC KEY-----",
 };
