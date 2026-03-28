@@ -140,7 +140,10 @@ export default function ConnectorDetailPage() {
     setIsTesting(true);
     setActionMessage(null);
     try {
-      const response = await fetch(`/api/connectors/${connector.id}/test`, { method: "POST" });
+      const response = await fetch(`/api/connectors/${connector.id}/test`, {
+        method: "POST",
+        headers: { "x-csrf-token": getCsrf() },
+      });
       const payload = await response.json();
       if (!response.ok || !payload?.data?.success) {
         setActionMessage(payload?.data?.error || payload?.error || "Connection test failed");
@@ -160,7 +163,7 @@ export default function ConnectorDetailPage() {
     try {
       const response = await fetch(`/api/connectors/${connector.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-csrf-token": getCsrf() },
         body: JSON.stringify({ enabled: !connector.enabled }),
       });
       const payload = await response.json();

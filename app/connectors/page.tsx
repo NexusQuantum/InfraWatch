@@ -244,9 +244,15 @@ export default function ConnectorsPage() {
         payload.password = form.password;
       }
 
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+      const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : "";
+
       const response = await fetch("/api/connectors", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrfToken,
+        },
         body: JSON.stringify(payload),
       });
       const body = await response.json().catch(() => ({}));
