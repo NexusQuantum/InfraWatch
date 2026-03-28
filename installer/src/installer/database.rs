@@ -211,29 +211,174 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     )?;
     logs.push(LogEntry::success("Database privileges configured"));
 
-    // Test connection
-    logs.push(LogEntry::info("Testing database connection..."));
-    let test = super::run_command(
-        "sudo",
-        &[
-            "-u",
-            "postgres",
-            "psql",
+    // Configure pg_hba.conf for password authentication
+    // Default Debian/Ubuntu uses 'peer' which only allows local unix socket auth
+    // We need 'md5' or 'scram-sha-256' for TCP connections with password
+    logs.push(LogEntry::info("Configuring PostgreSQL authentication..."));
+    configure_pg_hba(&mut logs)?;
+
+    // Restart PostgreSQL to apply pg_hba.conf changes
+    logs.push(LogEntry::info(
+        "Restarting PostgreSQL to apply auth config...",
+    ));
+    let _ = super::run_sudo("systemctl", &["restart", "postgresql"]);
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    // Test connection with actual password over TCP
+    logs.push(LogEntry::info(
+        "Testing database connection with password...",
+    ));
+    let test = std::process::Command::new("psql")
+        .env("PGPASSWORD", &password)
+        .args([
+            "-h",
+            &config.db_host,
+            "-p",
+            &config.db_port.to_string(),
+            "-U",
+            &config.db_user,
             "-d",
             &config.db_name,
             "-c",
             "SELECT 1",
-        ],
-    )?;
-    if test.status.success() {
-        logs.push(LogEntry::success("Database connection verified"));
-    } else {
-        logs.push(LogEntry::warning(
-            "Could not verify database connection — may need manual pg_hba.conf configuration",
-        ));
+        ])
+        .output();
+
+    match test {
+        Ok(output) if output.status.success() => {
+            logs.push(LogEntry::success(
+                "Database connection verified with password",
+            ));
+        }
+        Ok(output) => {
+            let stderr = super::output_stderr(&output);
+            logs.push(LogEntry::warning(format!(
+                "Password auth test failed: {} — app may not connect. Check pg_hba.conf",
+                stderr
+            )));
+        }
+        Err(_) => {
+            // psql might not be in PATH, try via sudo -u postgres
+            let test = super::run_command(
+                "sudo",
+                &[
+                    "-u",
+                    "postgres",
+                    "psql",
+                    "-d",
+                    &config.db_name,
+                    "-c",
+                    "SELECT 1",
+                ],
+            )?;
+            if test.status.success() {
+                logs.push(LogEntry::success(
+                    "Database connection verified (via postgres user)",
+                ));
+            } else {
+                logs.push(LogEntry::warning("Could not verify database connection"));
+            }
+        }
     }
 
     Ok(logs)
+}
+
+fn configure_pg_hba(logs: &mut Vec<LogEntry>) -> anyhow::Result<()> {
+    // Find pg_hba.conf
+    let output = super::run_command("sudo", &["-u", "postgres", "psql", "-tAc", "SHOW hba_file"])?;
+    let hba_path = super::output_to_string(&output);
+
+    if hba_path.is_empty() || !std::path::Path::new(&hba_path).exists() {
+        // Try common paths
+        let candidates = [
+            "/etc/postgresql/16/main/pg_hba.conf",
+            "/etc/postgresql/15/main/pg_hba.conf",
+            "/etc/postgresql/14/main/pg_hba.conf",
+            "/var/lib/pgsql/data/pg_hba.conf",
+            "/var/lib/pgsql/16/data/pg_hba.conf",
+        ];
+        let found = candidates.iter().find(|p| std::path::Path::new(p).exists());
+        if let Some(path) = found {
+            logs.push(LogEntry::info(format!("Found pg_hba.conf at {}", path)));
+            apply_pg_hba_fix(path, logs)?;
+        } else {
+            logs.push(LogEntry::warning(
+                "Could not find pg_hba.conf — password auth may not work",
+            ));
+        }
+    } else {
+        logs.push(LogEntry::info(format!("pg_hba.conf at {}", hba_path)));
+        apply_pg_hba_fix(&hba_path, logs)?;
+    }
+
+    Ok(())
+}
+
+fn apply_pg_hba_fix(hba_path: &str, logs: &mut Vec<LogEntry>) -> anyhow::Result<()> {
+    // Read current contents
+    let output = super::run_sudo("cat", &[hba_path])?;
+    let content = super::output_to_string(&output);
+
+    if content.is_empty() {
+        logs.push(LogEntry::warning("pg_hba.conf is empty or unreadable"));
+        return Ok(());
+    }
+
+    // Replace peer and ident with md5 for local and host connections
+    let mut modified = String::new();
+    let mut changed = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Skip comments and empty lines
+        if trimmed.starts_with('#') || trimmed.is_empty() {
+            modified.push_str(line);
+            modified.push('\n');
+            continue;
+        }
+
+        // Replace 'peer' with 'md5' for local connections
+        // Replace 'ident' with 'md5' for host connections
+        if (trimmed.starts_with("local") && trimmed.ends_with("peer"))
+            || (trimmed.starts_with("host") && trimmed.ends_with("ident"))
+        {
+            let new_line = if trimmed.ends_with("peer") {
+                line.replace("peer", "md5")
+            } else {
+                line.replace("ident", "md5")
+            };
+            modified.push_str(&new_line);
+            modified.push('\n');
+            changed = true;
+        } else {
+            modified.push_str(line);
+            modified.push('\n');
+        }
+    }
+
+    if changed {
+        // Write back via sudo
+        let tmp = "/tmp/pg_hba.conf.infrawatch";
+        std::fs::write(tmp, &modified)?;
+        let output = super::run_sudo("cp", &[tmp, hba_path])?;
+        std::fs::remove_file(tmp).ok();
+
+        if output.status.success() {
+            logs.push(LogEntry::success(
+                "Updated pg_hba.conf: peer/ident → md5 for password auth",
+            ));
+        } else {
+            logs.push(LogEntry::warning("Failed to update pg_hba.conf"));
+        }
+    } else {
+        logs.push(LogEntry::info(
+            "pg_hba.conf already uses password authentication",
+        ));
+    }
+
+    Ok(())
 }
 
 fn generate_password(length: usize) -> String {
