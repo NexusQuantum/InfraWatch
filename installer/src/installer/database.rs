@@ -285,99 +285,80 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
 }
 
 fn configure_pg_hba(logs: &mut Vec<LogEntry>) -> anyhow::Result<()> {
-    // Find pg_hba.conf
-    let output = super::run_command("sudo", &["-u", "postgres", "psql", "-tAc", "SHOW hba_file"])?;
-    let hba_path = super::output_to_string(&output);
+    // Find pg_hba.conf using glob patterns (matches NQRust-MicroVM approach)
+    let patterns = [
+        "/etc/postgresql/*/main/pg_hba.conf",
+        "/var/lib/pgsql/data/pg_hba.conf",
+        "/var/lib/postgresql/*/data/pg_hba.conf",
+    ];
 
-    if hba_path.is_empty() || !std::path::Path::new(&hba_path).exists() {
-        // Try common paths
-        let candidates = [
-            "/etc/postgresql/16/main/pg_hba.conf",
-            "/etc/postgresql/15/main/pg_hba.conf",
-            "/etc/postgresql/14/main/pg_hba.conf",
-            "/var/lib/pgsql/data/pg_hba.conf",
-            "/var/lib/pgsql/16/data/pg_hba.conf",
-        ];
-        let found = candidates.iter().find(|p| std::path::Path::new(p).exists());
-        if let Some(path) = found {
-            logs.push(LogEntry::info(format!("Found pg_hba.conf at {}", path)));
-            apply_pg_hba_fix(path, logs)?;
-        } else {
-            logs.push(LogEntry::warning(
-                "Could not find pg_hba.conf — password auth may not work",
-            ));
-        }
-    } else {
-        logs.push(LogEntry::info(format!("pg_hba.conf at {}", hba_path)));
-        apply_pg_hba_fix(&hba_path, logs)?;
-    }
+    for pattern in &patterns {
+        let output = super::run_command("sh", &["-c", &format!("ls {} 2>/dev/null", pattern)]);
+        if let Ok(out) = output {
+            if out.status.success() {
+                let paths = super::output_to_string(&out);
+                for path in paths.lines() {
+                    let path = path.trim();
+                    if path.is_empty() {
+                        continue;
+                    }
 
-    Ok(())
-}
+                    logs.push(LogEntry::info(format!("Found pg_hba.conf: {}", path)));
 
-fn apply_pg_hba_fix(hba_path: &str, logs: &mut Vec<LogEntry>) -> anyhow::Result<()> {
-    // Read current contents
-    let output = super::run_sudo("cat", &[hba_path])?;
-    let content = super::output_to_string(&output);
+                    // Check if already has md5 or scram-sha-256
+                    let cat_out = super::run_sudo("cat", &[path])?;
+                    let content = super::output_to_string(&cat_out);
 
-    if content.is_empty() {
-        logs.push(LogEntry::warning("pg_hba.conf is empty or unreadable"));
-        return Ok(());
-    }
+                    if content.contains(
+                        "local   all             all                                     md5",
+                    ) {
+                        logs.push(LogEntry::info("pg_hba.conf already has md5 auth rule"));
+                        return Ok(());
+                    }
 
-    // Replace peer and ident with md5 for local and host connections
-    let mut modified = String::new();
-    let mut changed = false;
+                    // Backup original
+                    let _ = super::run_sudo("cp", &[path, &format!("{}.backup.infrawatch", path)]);
 
-    for line in content.lines() {
-        let trimmed = line.trim();
+                    // Prepend md5 auth rule before other rules (NQRust-MicroVM approach)
+                    // This ensures our rule takes priority over default peer auth
+                    let _ = super::run_sudo(
+                        "sed",
+                        &[
+                            "-i",
+                            "1s/^/# InfraWatch: allow password auth for all local connections\\nlocal   all             all                                     md5\\nhost    all             all             127.0.0.1\\/32            md5\\nhost    all             all             ::1\\/128                 md5\\n/",
+                            path,
+                        ],
+                    );
 
-        // Skip comments and empty lines
-        if trimmed.starts_with('#') || trimmed.is_empty() {
-            modified.push_str(line);
-            modified.push('\n');
-            continue;
-        }
-
-        // Replace 'peer' with 'md5' for local connections
-        // Replace 'ident' with 'md5' for host connections
-        if (trimmed.starts_with("local") && trimmed.ends_with("peer"))
-            || (trimmed.starts_with("host") && trimmed.ends_with("ident"))
-        {
-            let new_line = if trimmed.ends_with("peer") {
-                line.replace("peer", "md5")
-            } else {
-                line.replace("ident", "md5")
-            };
-            modified.push_str(&new_line);
-            modified.push('\n');
-            changed = true;
-        } else {
-            modified.push_str(line);
-            modified.push('\n');
+                    logs.push(LogEntry::success("Prepended md5 auth rules to pg_hba.conf"));
+                    return Ok(());
+                }
+            }
         }
     }
 
-    if changed {
-        // Write back via sudo
-        let tmp = "/tmp/pg_hba.conf.infrawatch";
-        std::fs::write(tmp, &modified)?;
-        let output = super::run_sudo("cp", &[tmp, hba_path])?;
-        std::fs::remove_file(tmp).ok();
-
-        if output.status.success() {
-            logs.push(LogEntry::success(
-                "Updated pg_hba.conf: peer/ident → md5 for password auth",
-            ));
-        } else {
-            logs.push(LogEntry::warning("Failed to update pg_hba.conf"));
+    // Fallback: try asking PostgreSQL directly
+    let output = super::run_command("sudo", &["-u", "postgres", "psql", "-tAc", "SHOW hba_file"]);
+    if let Ok(out) = output {
+        let path = super::output_to_string(&out);
+        if !path.is_empty() && std::path::Path::new(&path).exists() {
+            logs.push(LogEntry::info(format!("pg_hba.conf via SHOW: {}", path)));
+            let _ = super::run_sudo(
+                "sed",
+                &[
+                    "-i",
+                    "1s/^/local   all             all                                     md5\\nhost    all             all             127.0.0.1\\/32            md5\\n/",
+                    &path,
+                ],
+            );
+            logs.push(LogEntry::success("Prepended md5 auth rules"));
+            return Ok(());
         }
-    } else {
-        logs.push(LogEntry::info(
-            "pg_hba.conf already uses password authentication",
-        ));
     }
 
+    logs.push(LogEntry::warning(
+        "Could not find pg_hba.conf — you may need to manually enable password auth",
+    ));
     Ok(())
 }
 

@@ -209,26 +209,49 @@ fn install_dependencies_airgap(config: &InstallConfig) -> Result<Vec<LogEntry>> 
     }
 
     // Install .deb/.rpm packages from bundle if present
+    // Two-pass approach (from NQRust-MicroVM):
+    //   Pass 1: dpkg -i *.deb (may fail on dep ordering — that's OK)
+    //   Pass 2: apt-get install -f --no-download (fixes deps using only local packages)
     let debs_dir = bundle.join("debs");
     let rpms_dir = bundle.join("rpms");
 
     if debs_dir.exists() {
         logs.push(LogEntry::info("Installing bundled .deb packages..."));
-        let output = super::run_sudo(
-            "bash",
+
+        // Pass 1: dpkg -i (install all, ignore dep failures)
+        logs.push(LogEntry::info("Pass 1: dpkg -i (initial install)..."));
+        let _ = super::run_sudo(
+            "sh",
             &[
                 "-c",
-                &format!(
-                    "dpkg -i {}/*.deb 2>/dev/null; apt-get install -f -y",
-                    debs_dir.display()
-                ),
+                &format!("dpkg -i {}/*.deb 2>&1 || true", debs_dir.display()),
             ],
+        );
+
+        // Pass 2: fix broken dependencies using only local packages
+        logs.push(LogEntry::info("Pass 2: fixing dependencies..."));
+        let output = super::run_sudo(
+            "sh",
+            &["-c", "apt-get install -f -y --no-download 2>&1 || true"],
         )?;
+
         if output.status.success() {
             logs.push(LogEntry::success("Bundled .deb packages installed"));
         } else {
             logs.push(LogEntry::warning(
                 "Some .deb packages may have failed — continuing",
+            ));
+        }
+
+        // Verify postgresql installed
+        let pg_ok = super::run_command("dpkg", &["-l", "postgresql"])
+            .map(|o| o.status.success() && super::output_to_string(&o).contains("ii"))
+            .unwrap_or(false);
+        if pg_ok {
+            logs.push(LogEntry::success("Package 'postgresql' verified"));
+        } else {
+            logs.push(LogEntry::warning(
+                "Package 'postgresql' may not have installed correctly",
             ));
         }
     } else if rpms_dir.exists() {
