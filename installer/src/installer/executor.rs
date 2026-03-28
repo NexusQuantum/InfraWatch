@@ -17,6 +17,13 @@ pub enum InstallMessage {
 }
 
 pub fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>) -> Result<()> {
+    // Generate database password ONCE upfront — used by both database setup and config generation
+    let db_password = if config.db_password.is_empty() {
+        super::database::generate_password(24)
+    } else {
+        config.db_password.clone()
+    };
+
     // Phase 1: Preflight
     tx.send(InstallMessage::PhaseStart(Phase::Preflight))?;
     let checks = super::preflight::run_preflight_checks(&config);
@@ -70,7 +77,7 @@ pub fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>) -> Re
     // Phase 3: Database
     if config.mode.includes_database() {
         tx.send(InstallMessage::PhaseStart(Phase::Database))?;
-        match super::database::setup_database(&config) {
+        match super::database::setup_database(&config, &db_password) {
             Ok(logs) => {
                 for log in logs {
                     tx.send(InstallMessage::Log(log))?;
@@ -138,7 +145,7 @@ pub fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>) -> Re
 
     // Phase 5: Configuration
     tx.send(InstallMessage::PhaseStart(Phase::Configuration))?;
-    match super::config::generate_config(&config) {
+    match super::config::generate_config(&config, &db_password) {
         Ok(logs) => {
             for log in logs {
                 tx.send(InstallMessage::Log(log))?;

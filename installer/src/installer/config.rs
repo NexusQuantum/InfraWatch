@@ -3,17 +3,10 @@ use anyhow::Result;
 use crate::app::{InstallConfig, LogEntry};
 use crate::theme;
 
-pub fn generate_config(config: &InstallConfig) -> Result<Vec<LogEntry>> {
+pub fn generate_config(config: &InstallConfig, db_password: &str) -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
 
     let install_dir = &config.install_dir;
-
-    // Generate passwords/keys if empty
-    let db_password = if config.db_password.is_empty() {
-        generate_random_string(24)
-    } else {
-        config.db_password.clone()
-    };
 
     let admin_password = if config.admin_password.is_empty() {
         let pass = generate_random_string(16);

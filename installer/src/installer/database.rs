@@ -6,8 +6,9 @@ use rand::Rng;
 use crate::app::{InstallConfig, LogEntry};
 use crate::installer::{command_exists, run_command, run_sudo};
 
-pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
+pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
+    let password = db_password;
 
     // Check if PostgreSQL is installed
     if !command_exists("psql") {
@@ -30,13 +31,6 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     }
 
     logs.push(LogEntry::success("PostgreSQL service started"));
-
-    // Generate password if not provided
-    let password = if config.db_password.is_empty() {
-        generate_password(24)
-    } else {
-        config.db_password.clone()
-    };
 
     // Check if database already exists
     let check_db = run_command(
@@ -176,7 +170,7 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
 
     // Test connection
     logs.push(LogEntry::info("Testing database connection..."));
-    let test_ok = test_database_connection(&config.db_name, &config.db_user, &password);
+    let test_ok = test_database_connection(&config.db_name, &config.db_user, password);
 
     if test_ok {
         logs.push(LogEntry::success("Database connection successful"));
