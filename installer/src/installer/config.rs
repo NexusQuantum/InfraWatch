@@ -56,7 +56,7 @@ ADMIN_PASSWORD={admin_password}
 LICENSE_SERVER_URL={license_server_url}
 LICENSE_API_KEY={license_api_key}
 LICENSE_GRACE_PERIOD_DAYS={license_grace_period}
-LICENSE_PUBLIC_KEY={license_public_key}
+LICENSE_PUBLIC_KEY="{license_public_key}"
 
 # Server
 PORT={port}
