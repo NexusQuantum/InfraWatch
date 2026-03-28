@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("session", session.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       sameSite: "lax",
       path: "/",
       expires: session.expiresAt,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("csrf_token", csrfToken, {
       httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       sameSite: "lax",
       path: "/",
       expires: session.expiresAt,
