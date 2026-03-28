@@ -93,33 +93,11 @@ jobs:
           file /tmp/bun-binary
           /tmp/bun-binary --version
 
-      # ── Download PostgreSQL .deb packages with ALL dependencies ──────
-      - name: Download PostgreSQL packages
+      # ── Bundle .deb packages via Docker (matches NQRust-MicroVM) ────
+      - name: Bundle deb packages
         run: |
-          mkdir -p /tmp/debs
-          cd /tmp/debs
-
-          # Install postgresql first so we know the exact package list
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql postgresql-contrib
-
-          # Download all postgresql packages and their dependencies
-          # Using dpkg to get the full installed dependency tree
-          PKGS=$(apt-cache depends --recurse --no-recommends --no-suggests \
-            --no-conflicts --no-breaks --no-replaces --no-enhances \
-            postgresql postgresql-contrib postgresql-client 2>/dev/null \
-            | grep "^\w" | sort -u)
-
-          echo "Downloading $(echo "$PKGS" | wc -w) packages..."
-          apt-get download $PKGS 2>/dev/null || true
-
-          # Also download the key packages explicitly in case apt-cache missed them
-          apt-get download postgresql postgresql-common postgresql-contrib \
-            postgresql-client-common libpq5 ssl-cert \
-            postgresql-16 postgresql-client-16 2>/dev/null || true
-
-          echo "=== Downloaded $(ls *.deb 2>/dev/null | wc -l) .deb files ==="
-          du -sh /tmp/debs/
+          chmod +x scripts/bundle-debs-ubuntu.sh
+          scripts/bundle-debs-ubuntu.sh --output /tmp/debs --version 24.04
 
       # ── Assemble bundle directory ─────────────────────────────────────
       - name: Assemble bundle

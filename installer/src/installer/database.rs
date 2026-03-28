@@ -1,81 +1,35 @@
-use anyhow::Result;
+use std::fs;
+
+use anyhow::{anyhow, Result};
+use rand::Rng;
 
 use crate::app::{InstallConfig, LogEntry};
+use crate::installer::{command_exists, run_command, run_sudo};
 
 pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
     let mut logs = Vec::new();
 
-    // Initialize PostgreSQL cluster if needed
-    // On RHEL/Fedora: postgresql-setup --initdb
-    if super::command_exists("postgresql-setup") {
-        logs.push(LogEntry::info("Initializing PostgreSQL cluster (RHEL)..."));
-        let _ = super::run_sudo("postgresql-setup", &["--initdb"]);
+    // Check if PostgreSQL is installed
+    if !command_exists("psql") {
+        logs.push(LogEntry::error("PostgreSQL is not installed"));
+        return Err(anyhow!("PostgreSQL not found — install postgresql first"));
     }
 
-    // On Debian/Ubuntu: pg_createcluster if no cluster exists yet
-    // This is needed after fresh .deb install (including airgap)
-    if super::command_exists("pg_lsclusters") {
-        let output = super::run_command("pg_lsclusters", &["--no-header"])?;
-        let clusters = super::output_to_string(&output);
-        if clusters.trim().is_empty() {
-            logs.push(LogEntry::info(
-                "No PostgreSQL cluster found, creating one...",
-            ));
-            // Detect installed PG version
-            let ver_output = super::run_command("ls", &["/usr/lib/postgresql/"])?;
-            let ver_str = super::output_to_string(&ver_output);
-            let version = ver_str
-                .lines()
-                .rfind(|l| !l.is_empty())
-                .unwrap_or("16")
-                .trim()
-                .to_string();
-            logs.push(LogEntry::info(format!(
-                "Detected PostgreSQL version: {}",
-                version
-            )));
-            let output = super::run_sudo("pg_createcluster", &[&version, "main", "--start"])?;
-            if output.status.success() {
-                logs.push(LogEntry::success("PostgreSQL cluster created and started"));
-            } else {
-                logs.push(LogEntry::warning(
-                    "pg_createcluster had issues, trying to start anyway",
-                ));
-            }
-        } else {
-            logs.push(LogEntry::info(format!(
-                "Existing cluster(s): {}",
-                clusters.trim()
-            )));
-        }
-    }
+    logs.push(LogEntry::info("Setting up PostgreSQL database..."));
 
     // Start and enable PostgreSQL
     logs.push(LogEntry::info("Starting PostgreSQL service..."));
-    let output = super::run_sudo("systemctl", &["start", "postgresql"])?;
-    if !output.status.success() {
-        // Try starting with specific version (Debian pattern: postgresql@16-main)
-        let stderr = super::output_stderr(&output);
-        logs.push(LogEntry::warning(format!(
-            "systemctl start postgresql failed: {}",
-            stderr
-        )));
-        logs.push(LogEntry::info("Trying alternative service names..."));
+    let _ = run_sudo("systemctl", &["enable", "postgresql"]);
+    let output = run_sudo("systemctl", &["start", "postgresql"])?;
 
-        // Try postgresql@*-main
-        let _ = super::run_sudo("systemctl", &["start", "postgresql@*-main"]);
-        // Check if it's actually running now
-        let check = super::run_command("pg_isready", &[]);
-        if check.map(|o| o.status.success()).unwrap_or(false) {
-            logs.push(LogEntry::success("PostgreSQL is running"));
-        } else {
-            return Err(anyhow::anyhow!(
-                "Failed to start PostgreSQL. Try: sudo systemctl start postgresql"
-            ));
-        }
+    if !output.status.success() {
+        // Try to initialize on RHEL-based systems
+        logs.push(LogEntry::info("Initializing PostgreSQL (RHEL-based)..."));
+        let _ = run_sudo("postgresql-setup", &["--initdb"]);
+        let _ = run_sudo("systemctl", &["start", "postgresql"]);
     }
-    let _ = super::run_sudo("systemctl", &["enable", "postgresql"]);
-    logs.push(LogEntry::success("PostgreSQL started and enabled"));
+
+    logs.push(LogEntry::success("PostgreSQL service started"));
 
     // Generate password if not provided
     let password = if config.db_password.is_empty() {
@@ -84,74 +38,8 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
         config.db_password.clone()
     };
 
-    // Create database user (idempotent)
-    logs.push(LogEntry::info(format!(
-        "Setting up database user '{}'...",
-        config.db_user
-    )));
-
-    let user_check = super::run_command(
-        "sudo",
-        &[
-            "-u",
-            "postgres",
-            "psql",
-            "-tAc",
-            &format!("SELECT 1 FROM pg_roles WHERE rolname='{}'", config.db_user),
-        ],
-    )?;
-
-    let user_exists = super::output_to_string(&user_check) == "1";
-
-    if !user_exists {
-        let create_result = super::run_command(
-            "sudo",
-            &[
-                "-u",
-                "postgres",
-                "psql",
-                "-c",
-                &format!(
-                    "CREATE USER {} WITH ENCRYPTED PASSWORD '{}'",
-                    config.db_user, password
-                ),
-            ],
-        )?;
-        if !create_result.status.success() {
-            return Err(anyhow::anyhow!("Failed to create database user"));
-        }
-        logs.push(LogEntry::success(format!(
-            "Created database user '{}'",
-            config.db_user
-        )));
-    } else {
-        // Update password for existing user
-        let _ = super::run_command(
-            "sudo",
-            &[
-                "-u",
-                "postgres",
-                "psql",
-                "-c",
-                &format!(
-                    "ALTER USER {} WITH ENCRYPTED PASSWORD '{}'",
-                    config.db_user, password
-                ),
-            ],
-        )?;
-        logs.push(LogEntry::info(format!(
-            "Database user '{}' already exists, password updated",
-            config.db_user
-        )));
-    }
-
-    // Create database (idempotent)
-    logs.push(LogEntry::info(format!(
-        "Setting up database '{}'...",
-        config.db_name
-    )));
-
-    let db_check = super::run_command(
+    // Check if database already exists
+    let check_db = run_command(
         "sudo",
         &[
             "-u",
@@ -165,210 +53,226 @@ pub fn setup_database(config: &InstallConfig) -> Result<Vec<LogEntry>> {
         ],
     )?;
 
-    let db_exists = super::output_to_string(&db_check) == "1";
+    let db_exists = String::from_utf8_lossy(&check_db.stdout).trim() == "1";
 
-    if !db_exists {
-        let create_result = super::run_command(
+    if db_exists {
+        logs.push(LogEntry::info(format!(
+            "Database '{}' already exists",
+            config.db_name
+        )));
+
+        // Ensure user password is correct
+        let alter_sql = format!(
+            "ALTER USER {} WITH ENCRYPTED PASSWORD '{}';",
+            config.db_user, password
+        );
+        let _ = run_command("sudo", &["-u", "postgres", "psql", "-c", &alter_sql]);
+        logs.push(LogEntry::success(format!(
+            "User '{}' password updated",
+            config.db_user
+        )));
+    } else {
+        // Create user or update password if exists
+        logs.push(LogEntry::info(format!(
+            "Creating user '{}'...",
+            config.db_user
+        )));
+
+        let create_user_sql = format!(
+            "CREATE USER {} WITH ENCRYPTED PASSWORD '{}';",
+            config.db_user, password
+        );
+        let output = run_command("sudo", &["-u", "postgres", "psql", "-c", &create_user_sql]);
+
+        if let Ok(out) = output {
+            if out.status.success() {
+                logs.push(LogEntry::success(format!(
+                    "User '{}' created",
+                    config.db_user
+                )));
+            } else if String::from_utf8_lossy(&out.stderr).contains("already exists") {
+                logs.push(LogEntry::info(format!(
+                    "User '{}' exists, updating password...",
+                    config.db_user
+                )));
+                let alter_sql = format!(
+                    "ALTER USER {} WITH ENCRYPTED PASSWORD '{}';",
+                    config.db_user, password
+                );
+                let _ = run_command("sudo", &["-u", "postgres", "psql", "-c", &alter_sql]);
+                logs.push(LogEntry::success(format!(
+                    "User '{}' password updated",
+                    config.db_user
+                )));
+            }
+        }
+
+        // Create database
+        logs.push(LogEntry::info(format!(
+            "Creating database '{}'...",
+            config.db_name
+        )));
+
+        let create_db_sql = format!(
+            "CREATE DATABASE {} WITH OWNER = {} ENCODING = 'UTF8';",
+            config.db_name, config.db_user
+        );
+        let output = run_command("sudo", &["-u", "postgres", "psql", "-c", &create_db_sql])?;
+
+        if output.status.success() {
+            logs.push(LogEntry::success(format!(
+                "Database '{}' created",
+                config.db_name
+            )));
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("already exists") {
+                logs.push(LogEntry::info(format!(
+                    "Database '{}' already exists",
+                    config.db_name
+                )));
+            } else {
+                logs.push(LogEntry::error(format!(
+                    "Failed to create database: {}",
+                    stderr
+                )));
+            }
+        }
+
+        // Grant permissions
+        logs.push(LogEntry::info("Granting database permissions..."));
+
+        let grant_sql = format!(
+            "GRANT ALL PRIVILEGES ON DATABASE {} TO {};",
+            config.db_name, config.db_user
+        );
+        let _ = run_command("sudo", &["-u", "postgres", "psql", "-c", &grant_sql]);
+
+        // Grant schema permissions
+        let grant_schema_sql = format!("GRANT ALL ON SCHEMA public TO {};", config.db_user);
+        let _ = run_command(
             "sudo",
             &[
                 "-u",
                 "postgres",
                 "psql",
+                "-d",
+                &config.db_name,
                 "-c",
-                &format!(
-                    "CREATE DATABASE {} OWNER {}",
-                    config.db_name, config.db_user
-                ),
+                &grant_schema_sql,
             ],
-        )?;
-        if !create_result.status.success() {
-            return Err(anyhow::anyhow!("Failed to create database"));
-        }
-        logs.push(LogEntry::success(format!(
-            "Created database '{}'",
-            config.db_name
-        )));
-    } else {
-        logs.push(LogEntry::info(format!(
-            "Database '{}' already exists",
-            config.db_name
-        )));
+        );
+
+        logs.push(LogEntry::success("Database permissions configured"));
     }
 
-    // Grant privileges
-    let _ = super::run_command(
-        "sudo",
-        &[
-            "-u",
-            "postgres",
-            "psql",
-            "-c",
-            &format!(
-                "GRANT ALL PRIVILEGES ON DATABASE {} TO {}",
-                config.db_name, config.db_user
-            ),
-        ],
-    )?;
-    logs.push(LogEntry::success("Database privileges configured"));
-
     // Configure pg_hba.conf for password authentication
-    // Default Debian/Ubuntu uses 'peer' which only allows local unix socket auth
-    // We need 'md5' or 'scram-sha-256' for TCP connections with password
     logs.push(LogEntry::info("Configuring PostgreSQL authentication..."));
-    configure_pg_hba(&mut logs)?;
+    configure_pg_hba()?;
+    logs.push(LogEntry::success("PostgreSQL authentication configured"));
 
-    // Restart PostgreSQL to apply pg_hba.conf changes
-    logs.push(LogEntry::info(
-        "Restarting PostgreSQL to apply auth config...",
-    ));
-    let _ = super::run_sudo("systemctl", &["restart", "postgresql"]);
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    // Restart PostgreSQL to apply changes
+    let _ = run_sudo("systemctl", &["restart", "postgresql"]);
 
-    // Test connection with actual password over TCP
-    logs.push(LogEntry::info(
-        "Testing database connection with password...",
-    ));
-    let test = std::process::Command::new("psql")
-        .env("PGPASSWORD", &password)
-        .args([
-            "-h",
-            &config.db_host,
-            "-p",
-            &config.db_port.to_string(),
-            "-U",
-            &config.db_user,
-            "-d",
-            &config.db_name,
-            "-c",
-            "SELECT 1",
-        ])
-        .output();
+    // Test connection
+    logs.push(LogEntry::info("Testing database connection..."));
+    let test_ok = test_database_connection(&config.db_name, &config.db_user, &password);
 
-    match test {
-        Ok(output) if output.status.success() => {
-            logs.push(LogEntry::success(
-                "Database connection verified with password",
-            ));
-        }
-        Ok(output) => {
-            let stderr = super::output_stderr(&output);
-            logs.push(LogEntry::warning(format!(
-                "Password auth test failed: {} — app may not connect. Check pg_hba.conf",
-                stderr
-            )));
-        }
-        Err(_) => {
-            // psql might not be in PATH, try via sudo -u postgres
-            let test = super::run_command(
-                "sudo",
-                &[
-                    "-u",
-                    "postgres",
-                    "psql",
-                    "-d",
-                    &config.db_name,
-                    "-c",
-                    "SELECT 1",
-                ],
-            )?;
-            if test.status.success() {
-                logs.push(LogEntry::success(
-                    "Database connection verified (via postgres user)",
-                ));
-            } else {
-                logs.push(LogEntry::warning("Could not verify database connection"));
-            }
-        }
+    if test_ok {
+        logs.push(LogEntry::success("Database connection successful"));
+    } else {
+        logs.push(LogEntry::warning(
+            "Database connection test failed — may need manual verification",
+        ));
     }
 
     Ok(logs)
 }
 
-fn configure_pg_hba(logs: &mut Vec<LogEntry>) -> anyhow::Result<()> {
-    // Find pg_hba.conf using glob patterns (matches NQRust-MicroVM approach)
-    let patterns = [
+/// Configure pg_hba.conf for password authentication.
+/// Matches NQRust-MicroVM approach: find pg_hba.conf via glob, check if md5/scram
+/// already present, if not prepend a local md5 rule.
+fn configure_pg_hba() -> Result<()> {
+    let possible_paths = [
         "/etc/postgresql/*/main/pg_hba.conf",
         "/var/lib/pgsql/data/pg_hba.conf",
         "/var/lib/postgresql/*/data/pg_hba.conf",
     ];
 
-    for pattern in &patterns {
-        let output = super::run_command("sh", &["-c", &format!("ls {} 2>/dev/null", pattern)]);
-        if let Ok(out) = output {
-            if out.status.success() {
-                let paths = super::output_to_string(&out);
+    for pattern in &possible_paths {
+        if let Ok(output) = run_command("sh", &["-c", &format!("ls {}", pattern)]) {
+            if output.status.success() {
+                let paths = String::from_utf8_lossy(&output.stdout);
                 for path in paths.lines() {
                     let path = path.trim();
                     if path.is_empty() {
                         continue;
                     }
 
-                    logs.push(LogEntry::info(format!("Found pg_hba.conf: {}", path)));
+                    // Read current config
+                    if let Ok(content) = fs::read_to_string(path) {
+                        // Check if already configured for md5/scram-sha-256
+                        if content.contains("md5") || content.contains("scram-sha-256") {
+                            return Ok(());
+                        }
 
-                    // Check if already has md5 or scram-sha-256
-                    let cat_out = super::run_sudo("cat", &[path])?;
-                    let content = super::output_to_string(&cat_out);
+                        // Prepend md5 auth for local connections (before other rules)
+                        let new_line =
+                            "local   all             all                                     md5";
 
-                    if content.contains(
-                        "local   all             all                                     md5",
-                    ) {
-                        logs.push(LogEntry::info("pg_hba.conf already has md5 auth rule"));
-                        return Ok(());
+                        // Backup original
+                        let backup_cmd = format!("sudo cp {} {}.backup", path, path);
+                        let _ = run_command("sh", &["-c", &backup_cmd]);
+
+                        // Prepend the rule
+                        let sed_cmd = format!("sudo sed -i '1s/^/{}\\n/' {}", new_line, path);
+                        let _ = run_command("sh", &["-c", &sed_cmd]);
                     }
-
-                    // Backup original
-                    let _ = super::run_sudo("cp", &[path, &format!("{}.backup.infrawatch", path)]);
-
-                    // Prepend md5 auth rule before other rules (NQRust-MicroVM approach)
-                    // This ensures our rule takes priority over default peer auth
-                    let _ = super::run_sudo(
-                        "sed",
-                        &[
-                            "-i",
-                            "1s/^/# InfraWatch: allow password auth for all local connections\\nlocal   all             all                                     md5\\nhost    all             all             127.0.0.1\\/32            md5\\nhost    all             all             ::1\\/128                 md5\\n/",
-                            path,
-                        ],
-                    );
-
-                    logs.push(LogEntry::success("Prepended md5 auth rules to pg_hba.conf"));
                     return Ok(());
                 }
             }
         }
     }
 
-    // Fallback: try asking PostgreSQL directly
-    let output = super::run_command("sudo", &["-u", "postgres", "psql", "-tAc", "SHOW hba_file"]);
-    if let Ok(out) = output {
-        let path = super::output_to_string(&out);
-        if !path.is_empty() && std::path::Path::new(&path).exists() {
-            logs.push(LogEntry::info(format!("pg_hba.conf via SHOW: {}", path)));
-            let _ = super::run_sudo(
-                "sed",
-                &[
-                    "-i",
-                    "1s/^/local   all             all                                     md5\\nhost    all             all             127.0.0.1\\/32            md5\\n/",
-                    &path,
-                ],
-            );
-            logs.push(LogEntry::success("Prepended md5 auth rules"));
-            return Ok(());
-        }
-    }
-
-    logs.push(LogEntry::warning(
-        "Could not find pg_hba.conf — you may need to manually enable password auth",
-    ));
     Ok(())
 }
 
-fn generate_password(length: usize) -> String {
-    use rand::Rng;
-    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        .chars()
-        .collect();
+/// Test database connection using psql with password
+fn test_database_connection(db_name: &str, db_user: &str, db_password: &str) -> bool {
+    // Try connection string
+    let conn = format!(
+        "postgresql://{}:{}@localhost:5432/{}",
+        db_user, db_password, db_name
+    );
+    let output = run_command("psql", &[&conn, "-c", "SELECT 1;"]);
+    if let Ok(out) = output {
+        if out.status.success() {
+            return true;
+        }
+    }
+
+    // Fallback: PGPASSWORD env var
+    let output = run_command(
+        "sh",
+        &[
+            "-c",
+            &format!(
+                "PGPASSWORD='{}' psql -h localhost -U {} -d {} -c 'SELECT 1;'",
+                db_password, db_user, db_name
+            ),
+        ],
+    );
+
+    output.map(|o| o.status.success()).unwrap_or(false)
+}
+
+pub fn generate_password(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::thread_rng();
     (0..length)
-        .map(|_| chars[rng.gen_range(0..chars.len())])
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
         .collect()
 }
