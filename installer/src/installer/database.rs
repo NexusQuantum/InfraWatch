@@ -63,7 +63,10 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
             "ALTER USER {} WITH ENCRYPTED PASSWORD '{}';",
             config.db_user, password
         );
-        let _ = run_command("sudo", &["-u", "postgres", "psql", "-p", &port_str, "-c", &alter_sql]);
+        let _ = run_command(
+            "sudo",
+            &["-u", "postgres", "psql", "-p", &port_str, "-c", &alter_sql],
+        );
         logs.push(LogEntry::success(format!(
             "User '{}' password updated",
             config.db_user
@@ -79,7 +82,18 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
             "CREATE USER {} WITH ENCRYPTED PASSWORD '{}';",
             config.db_user, password
         );
-        let output = run_command("sudo", &["-u", "postgres", "psql", "-p", &port_str, "-c", &create_user_sql]);
+        let output = run_command(
+            "sudo",
+            &[
+                "-u",
+                "postgres",
+                "psql",
+                "-p",
+                &port_str,
+                "-c",
+                &create_user_sql,
+            ],
+        );
 
         if let Ok(out) = output {
             if out.status.success() {
@@ -96,7 +110,10 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
                     "ALTER USER {} WITH ENCRYPTED PASSWORD '{}';",
                     config.db_user, password
                 );
-                let _ = run_command("sudo", &["-u", "postgres", "psql", "-p", &port_str, "-c", &alter_sql]);
+                let _ = run_command(
+                    "sudo",
+                    &["-u", "postgres", "psql", "-p", &port_str, "-c", &alter_sql],
+                );
                 logs.push(LogEntry::success(format!(
                     "User '{}' password updated",
                     config.db_user
@@ -114,7 +131,18 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
             "CREATE DATABASE {} WITH OWNER = {} ENCODING = 'UTF8';",
             config.db_name, config.db_user
         );
-        let output = run_command("sudo", &["-u", "postgres", "psql", "-p", &port_str, "-c", &create_db_sql])?;
+        let output = run_command(
+            "sudo",
+            &[
+                "-u",
+                "postgres",
+                "psql",
+                "-p",
+                &port_str,
+                "-c",
+                &create_db_sql,
+            ],
+        )?;
 
         if output.status.success() {
             logs.push(LogEntry::success(format!(
@@ -143,7 +171,10 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
             "GRANT ALL PRIVILEGES ON DATABASE {} TO {};",
             config.db_name, config.db_user
         );
-        let _ = run_command("sudo", &["-u", "postgres", "psql", "-p", &port_str, "-c", &grant_sql]);
+        let _ = run_command(
+            "sudo",
+            &["-u", "postgres", "psql", "-p", &port_str, "-c", &grant_sql],
+        );
 
         // Grant schema permissions
         let grant_schema_sql = format!("GRANT ALL ON SCHEMA public TO {};", config.db_user);
@@ -175,7 +206,8 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
 
     // Test connection
     logs.push(LogEntry::info("Testing database connection..."));
-    let test_ok = test_database_connection(&config.db_name, &config.db_user, password, config.db_port);
+    let test_ok =
+        test_database_connection(&config.db_name, &config.db_user, password, config.db_port);
 
     if test_ok {
         logs.push(LogEntry::success("Database connection successful"));
