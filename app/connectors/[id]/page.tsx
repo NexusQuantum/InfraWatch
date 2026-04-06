@@ -187,7 +187,10 @@ export default function ConnectorDetailPage() {
     setIsDeleting(true);
     setActionMessage(null);
     try {
-      const response = await fetch(`/api/connectors/${connector.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/connectors/${connector.id}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": getCsrf() },
+      });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setActionMessage(payload?.error || "Failed to delete connector");

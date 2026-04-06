@@ -279,7 +279,12 @@ export default function ConnectorsPage() {
     setDeletingId(connectorId);
     setActionMessage(null);
     try {
-      const response = await fetch(`/api/connectors/${connectorId}`, { method: "DELETE" });
+      const csrfMatch2 = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+      const csrfToken2 = csrfMatch2 ? decodeURIComponent(csrfMatch2[1]) : "";
+      const response = await fetch(`/api/connectors/${connectorId}`, {
+        method: "DELETE",
+        headers: { "x-csrf-token": csrfToken2 },
+      });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         setActionMessage(body?.error || "Failed to delete connector");
