@@ -33,6 +33,23 @@ pub fn setup_database(config: &InstallConfig, db_password: &str) -> Result<Vec<L
 
     logs.push(LogEntry::success("PostgreSQL service started"));
 
+    // Configure PostgreSQL to listen on the requested port
+    if config.db_port != 5432 {
+        logs.push(LogEntry::info(format!(
+            "Configuring PostgreSQL to listen on port {}...",
+            config.db_port
+        )));
+        configure_pg_port(config.db_port, &mut logs)?;
+        // Restart to apply the new port
+        let _ = run_sudo("systemctl", &["restart", "postgresql"]);
+        // Give PG a moment to come back up on the new port
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        logs.push(LogEntry::success(format!(
+            "PostgreSQL now listening on port {}",
+            config.db_port
+        )));
+    }
+
     // Check if database already exists
     let check_db = run_command(
         "sudo",
@@ -265,6 +282,70 @@ fn configure_pg_hba() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Configure PostgreSQL to listen on a custom port.
+/// Finds postgresql.conf via glob patterns and sets/updates the port directive.
+fn configure_pg_port(port: u16, logs: &mut Vec<LogEntry>) -> Result<()> {
+    let possible_paths = [
+        "/etc/postgresql/*/main/postgresql.conf",
+        "/var/lib/pgsql/data/postgresql.conf",
+        "/var/lib/postgresql/*/data/postgresql.conf",
+    ];
+
+    for pattern in &possible_paths {
+        if let Ok(output) = run_command("sh", &["-c", &format!("ls {}", pattern)]) {
+            if output.status.success() {
+                let paths = String::from_utf8_lossy(&output.stdout);
+                for path in paths.lines() {
+                    let path = path.trim();
+                    if path.is_empty() {
+                        continue;
+                    }
+
+                    logs.push(LogEntry::info(format!("Found postgresql.conf at {}", path)));
+
+                    // Backup original
+                    let _ =
+                        run_command("sh", &["-c", &format!("sudo cp {} {}.backup", path, path)]);
+
+                    // Update or add the port setting
+                    // First try to replace existing port line
+                    let sed_cmd = format!(
+                        "sudo sed -i \"s/^#*\\s*port\\s*=.*/port = {}/\" {}",
+                        port, path
+                    );
+                    let _ = run_command("sh", &["-c", &sed_cmd]);
+
+                    // Check if port line exists now
+                    let grep =
+                        run_command("sh", &["-c", &format!("grep -q '^port\\s*=' {}", path)]);
+                    if grep.map(|o| o.status.success()).unwrap_or(false) {
+                        logs.push(LogEntry::success(format!(
+                            "Set port = {} in {}",
+                            port, path
+                        )));
+                    } else {
+                        // Append if no port line found
+                        let append_cmd =
+                            format!("echo 'port = {}' | sudo tee -a {} > /dev/null", port, path);
+                        let _ = run_command("sh", &["-c", &append_cmd]);
+                        logs.push(LogEntry::success(format!(
+                            "Appended port = {} to {}",
+                            port, path
+                        )));
+                    }
+
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    logs.push(LogEntry::warning(
+        "Could not find postgresql.conf — port may need manual configuration",
+    ));
     Ok(())
 }
 
