@@ -26,6 +26,10 @@ async function ensureAuthTables(): Promise<void> {
           expires_at TIMESTAMPTZ NOT NULL
         )
       `);
+      // SSO identity columns (nullable — only populated for SSO logins)
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sso_provider TEXT`);
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sso_email TEXT`);
+      await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sso_name TEXT`);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS login_attempts (
           id SERIAL PRIMARY KEY,
@@ -106,7 +110,11 @@ export async function validateCredentials(
 // Session management
 // ---------------------------------------------------------------------------
 
-export async function createSession(): Promise<{
+export async function createSession(ssoIdentity?: {
+  provider: "saml" | "oidc";
+  email: string;
+  name?: string;
+}): Promise<{
   token: string;
   expiresAt: Date;
 }> {
@@ -114,10 +122,41 @@ export async function createSession(): Promise<{
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   await pool.query(
-    "INSERT INTO sessions (token, expires_at) VALUES ($1, $2)",
-    [token, expiresAt.toISOString()]
+    "INSERT INTO sessions (token, expires_at, sso_provider, sso_email, sso_name) VALUES ($1, $2, $3, $4, $5)",
+    [
+      token,
+      expiresAt.toISOString(),
+      ssoIdentity?.provider ?? null,
+      ssoIdentity?.email ?? null,
+      ssoIdentity?.name ?? null,
+    ]
   );
   return { token, expiresAt };
+}
+
+export async function getSessionIdentity(
+  token: string
+): Promise<{
+  ssoProvider: string | null;
+  ssoEmail: string | null;
+  ssoName: string | null;
+} | null> {
+  await ensureAuthTables();
+  const result = await pool.query<{
+    sso_provider: string | null;
+    sso_email: string | null;
+    sso_name: string | null;
+  }>(
+    "SELECT sso_provider, sso_email, sso_name FROM sessions WHERE token = $1 AND expires_at > NOW()",
+    [token]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    ssoProvider: row.sso_provider,
+    ssoEmail: row.sso_email,
+    ssoName: row.sso_name,
+  };
 }
 
 export async function validateSession(token: string): Promise<boolean> {

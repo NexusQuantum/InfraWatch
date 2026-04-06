@@ -52,7 +52,7 @@ enum Commands {
         #[arg(long, default_value = "localhost")]
         db_host: String,
 
-        #[arg(long, default_value = "5432")]
+        #[arg(long, default_value = "15600")]
         db_port: u16,
 
         #[arg(long, default_value = "infrawatch")]

@@ -25,6 +25,13 @@ pub fn generate_config(config: &InstallConfig, db_password: &str) -> Result<Vec<
         config.connector_encryption_key.clone()
     };
 
+    // Resolve APP_URL host: use db_host if non-loopback, otherwise auto-detect
+    let app_host = if config.db_host != "localhost" && config.db_host != "127.0.0.1" {
+        config.db_host.clone()
+    } else {
+        detect_local_ip()
+    };
+
     // Build DATABASE_URL
     let database_url = format!(
         "postgresql://{}:{}@{}:{}/{}",
@@ -60,6 +67,7 @@ LICENSE_PUBLIC_KEY="{license_public_key}"
 
 # Server
 PORT={port}
+APP_URL=http://{app_host}:{port}
 "#,
         version = theme::VERSION,
         database_url = database_url,
@@ -71,6 +79,7 @@ PORT={port}
         license_grace_period = license_grace_period,
         license_public_key = license_public_key,
         port = config.http_port,
+        app_host = app_host,
     );
 
     let env_path = install_dir.join(".env");
@@ -90,6 +99,19 @@ PORT={port}
     }
 
     Ok(logs)
+}
+
+/// Detect the machine's primary non-loopback IP via `hostname -I`.
+fn detect_local_ip() -> String {
+    if let Ok(output) = super::run_command("hostname", &["-I"]) {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Some(ip) = stdout.split_whitespace().next() {
+            if !ip.is_empty() {
+                return ip.to_string();
+            }
+        }
+    }
+    "localhost".to_string()
 }
 
 fn generate_random_string(length: usize) -> String {

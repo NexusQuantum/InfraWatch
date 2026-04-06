@@ -1,6 +1,7 @@
 // Re-export all types
 export * from "./entities"
 export * from "./panels"
+export * from "./sso"
 
 // ============================================================================
 // API RESPONSE TYPES

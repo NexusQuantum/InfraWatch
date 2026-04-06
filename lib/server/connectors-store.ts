@@ -1,6 +1,7 @@
 import "server-only";
 
-import { randomBytes, createCipheriv, createDecipheriv, createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { encryptString, decryptString } from "./encryption";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { AuthMode, ConnectorStatus, ConnectorType, ConnectorTypeMeta } from "@/lib/types";
@@ -119,20 +120,7 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-function getEncryptionKey(): Buffer {
-  const raw = process.env.CONNECTOR_ENCRYPTION_KEY || process.env.PROMETHEUS_CONNECTOR_ENCRYPTION_KEY;
-  if (!raw) {
-    throw new Error("CONNECTOR_ENCRYPTION_KEY is required for connector secret storage");
-  }
-  if (process.env.NODE_ENV === "production") {
-    if (raw === "local-dev-connector-key-change-me" || raw.length < 16) {
-      throw new Error(
-        "CONNECTOR_ENCRYPTION_KEY is too weak for production. Use a strong key (at least 16 characters)."
-      );
-    }
-  }
-  return createHash("sha256").update(raw).digest();
-}
+// Encryption key is now managed by lib/server/encryption.ts
 
 function looksLikeHypervisorUrl(baseUrl: string): boolean {
   return /(cattle-monitoring-system|rancher-monitoring-prometheus|harvester|nqrust-hypervisor)/i.test(baseUrl);
@@ -188,32 +176,11 @@ function connectorTypeMeta(connectorType: ConnectorType): ConnectorTypeMeta {
 }
 
 function encryptSecret(payload: SecretPayload): string {
-  const key = getEncryptionKey();
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const plaintext = JSON.stringify(payload);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${iv.toString("base64")}.${tag.toString("base64")}.${encrypted.toString("base64")}`;
+  return encryptString(JSON.stringify(payload));
 }
 
 function decryptSecret(ciphertext: string): SecretPayload {
-  if (ciphertext.startsWith("plain:")) {
-    const raw = Buffer.from(ciphertext.slice("plain:".length), "base64").toString("utf8");
-    return JSON.parse(raw) as SecretPayload;
-  }
-  const key = getEncryptionKey();
-  const [ivB64, tagB64, encB64] = ciphertext.split(".");
-  if (!ivB64 || !tagB64 || !encB64) {
-    throw new Error("Corrupted connector secret");
-  }
-  const iv = Buffer.from(ivB64, "base64");
-  const tag = Buffer.from(tagB64, "base64");
-  const encrypted = Buffer.from(encB64, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
-  return JSON.parse(decrypted) as SecretPayload;
+  return JSON.parse(decryptString(ciphertext)) as SecretPayload;
 }
 
 function buildSecretPayload(input: ConnectorCreateInput | ConnectorUpdateInput, authMode: AuthMode): SecretPayload {

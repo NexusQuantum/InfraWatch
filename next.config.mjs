@@ -15,6 +15,7 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  allowedDevOrigins: ["192.168.18.177"],
 }
 
 export default nextConfig

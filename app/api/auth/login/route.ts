@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/auth";
 import { logAudit } from "@/lib/server/audit";
 import { getClientIp } from "@/lib/server/require-session";
+import { isSecureCookie } from "@/lib/server/cookie-options";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("session", session.token, {
       httpOnly: true,
-      secure: false,
+      secure: isSecureCookie(),
       sameSite: "lax",
       path: "/",
       expires: session.expiresAt,
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set("csrf_token", csrfToken, {
       httpOnly: false,
-      secure: false,
+      secure: isSecureCookie(),
       sameSite: "lax",
       path: "/",
       expires: session.expiresAt,

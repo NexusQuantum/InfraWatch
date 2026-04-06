@@ -26,6 +26,7 @@ import {
 
 import { AppShell } from "@/components/layout/app-shell";
 import { CommandBar } from "@/components/layout/command-bar";
+import { SsoSettings } from "@/components/settings/sso-settings";
 
 export default function SettingsPage() {
   return (
@@ -207,6 +208,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        {/* SSO */}
+        <SsoSettings />
 
         {/* Session */}
         <Card className="p-6">

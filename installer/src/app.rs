@@ -279,7 +279,7 @@ impl Default for InstallConfig {
             install_dir: PathBuf::from("/opt/infrawatch"),
             data_dir: PathBuf::from("/var/lib/infrawatch"),
             db_host: "localhost".to_string(),
-            db_port: 5432,
+            db_port: 15600,
             db_name: "infrawatch".to_string(),
             db_user: "infrawatch".to_string(),
             db_password: String::new(),

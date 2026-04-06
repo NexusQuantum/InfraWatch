@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/auth/logout"]);
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/sso/providers",
+  "/api/auth/sso/saml/login",
+  "/api/auth/sso/saml/callback",
+  "/api/auth/sso/saml/metadata",
+  "/api/auth/sso/oidc/login",
+  "/api/auth/sso/oidc/callback",
+]);
 const PUBLIC_PREFIXES = ["/logo/", "/_next/", "/favicon"];
 const LICENSE_EXEMPT = ["/setup", "/api/license/", "/api/auth/"];
 

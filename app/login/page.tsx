@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { SsoButtons } from "@/components/login/sso-buttons";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +16,15 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Show SSO callback errors from query string
+    const params = new URLSearchParams(window.location.search);
+    const ssoError = params.get("error");
+    if (ssoError) {
+      setError(`SSO login failed: ${ssoError.replace(/_/g, " ")}`);
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -76,6 +86,7 @@ export default function LoginPage() {
 
         {/* Login Card */}
         <Card className="p-6">
+          <SsoButtons />
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="username" className="text-sm font-medium">
