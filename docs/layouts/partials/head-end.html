@@ -1,0 +1,26 @@
+{{/* Inject InfraWatch brand orange overrides on every page, including the landing.
+
+     Lotus Docs's own `custom_css` param is only loaded on docs pages, and the
+     landing template's SCSS pipeline does not import `custom/colors/<theme>` —
+     so we load the theme CSS here to guarantee the orange brand color is
+     applied everywhere (landing, docs, taxonomy, 404). */}}
+
+{{ $iwTheme := resources.Get "css/infrawatch-theme.css" }}
+{{ with $iwTheme }}
+  {{- if hugo.IsProduction }}
+    {{- $iwTheme = . | minify | fingerprint "sha384" }}
+    <link rel="stylesheet" href="{{ $iwTheme.RelPermalink }}" integrity="{{ $iwTheme.Data.Integrity }}">
+  {{- else }}
+    <link rel="stylesheet" href="{{ .RelPermalink }}">
+  {{- end }}
+{{ end }}
+
+{{ $tocCollapse := resources.Get "css/toc-collapse.css" }}
+{{ with $tocCollapse }}
+  <link rel="stylesheet" href="{{ .RelPermalink }}">
+{{ end }}
+
+{{ $tocCollapseJS := resources.Get "js/toc-collapse.js" }}
+{{ with $tocCollapseJS }}
+  <script src="{{ .RelPermalink }}" defer></script>
+{{ end }}

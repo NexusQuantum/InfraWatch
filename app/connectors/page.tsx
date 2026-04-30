@@ -33,7 +33,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Plug,
   Plus,
   ArrowUpRight,
   AlertTriangle,
@@ -46,8 +45,17 @@ import {
   Layers,
   Activity,
   Trash2,
+  BookOpen,
+  Terminal,
+  KeyRound,
 } from "lucide-react";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { AppShell } from "@/components/layout/app-shell";
 import { CommandBar } from "@/components/layout/command-bar";
 import { useLiveConnectors } from "@/lib/api/live-hooks";
@@ -73,57 +81,25 @@ type ConnectorFormState = {
 const CONNECTOR_TYPE_OPTIONS: Array<{ value: ConnectorType; label: string; description: string }> = [
   {
     value: "nqrust_hypervisor",
-    label: "NQRust-Hypervisor",
-    description: "Use Rancher/Harvester monitoring Prometheus proxy endpoint.",
+    label: "NQRust Hypervisor",
+    description: "Connect to an NQRust Hypervisor manager's embedded Prometheus endpoint.",
   },
 ];
 
-function presetForType(type: ConnectorType): ConnectorFormState {
-  if (type === "nqrust_hypervisor") {
-    return {
-      connectorType: type,
-      name: "NQRust Hypervisor",
-      baseUrl:
-        "https://rancher.example.com/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy",
-      environment: "production",
-      site: "default",
-      datacenter: "default",
-      authMode: "bearer",
-      bearerToken: "",
-      username: "",
-      password: "",
-      insecureTls: true,
-      notes: "Rancher/Harvester monitoring connector.",
-    };
-  }
-  if (type === "kubernetes_cluster") {
-    return {
-      connectorType: type,
-      name: "Kubernetes Cluster",
-      baseUrl: "https://prometheus-k8s.example.com",
-      environment: "production",
-      site: "default",
-      datacenter: "default",
-      authMode: "bearer",
-      bearerToken: "",
-      username: "",
-      password: "",
-      insecureTls: true,
-      notes: "Tip: ensure kube-state-metrics and node exporter are present.",
-    };
-  }
+function presetForNqrustHypervisor(): ConnectorFormState {
   return {
-    connectorType: type,
-    name: "Prometheus Connector",
-    baseUrl: "https://prometheus.example.com",
+    connectorType: "nqrust_hypervisor",
+    name: "NQRust Hypervisor",
+    baseUrl:
+      "https://<hypervisor-host>/k8s/clusters/local/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy",
     environment: "production",
     site: "default",
     datacenter: "default",
-    authMode: "none",
+    authMode: "bearer",
     bearerToken: "",
     username: "",
     password: "",
-    insecureTls: false,
+    insecureTls: true,
     notes: "",
   };
 }
@@ -200,7 +176,7 @@ export default function ConnectorsPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [typeFilter, setTypeFilter] = useState<"all" | ConnectorType>("all");
-  const [form, setForm] = useState<ConnectorFormState>(presetForType("nqrust_hypervisor"));
+  const [form, setForm] = useState<ConnectorFormState>(presetForNqrustHypervisor());
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -217,7 +193,7 @@ export default function ConnectorsPage() {
   };
 
   const startWizard = () => {
-    setForm({ ...presetForType("nqrust_hypervisor"), name: "" });
+    setForm({ ...presetForNqrustHypervisor(), name: "" });
     setWizardStep(2);
     setActionMessage(null);
     setIsWizardOpen(true);
@@ -301,7 +277,7 @@ export default function ConnectorsPage() {
 
   return (
     <AppShell>
-      <CommandBar title="Connectors" subtitle={`${stats.total} Prometheus connectors`}>
+      <CommandBar title="Connectors" subtitle={`${stats.total} NQRust Hypervisor connector${stats.total === 1 ? "" : "s"}`}>
         <Button size="sm" className="gap-1.5" onClick={startWizard}>
           <Plus className="h-4 w-4" />
           Add Connector
@@ -428,14 +404,80 @@ export default function ConnectorsPage() {
       <Sheet open={isWizardOpen} onOpenChange={setIsWizardOpen}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Add NQRust-Hypervisor</SheetTitle>
+            <SheetTitle>Add NQRust Hypervisor</SheetTitle>
             <SheetDescription>
-              Connect a Rancher/Harvester monitoring Prometheus endpoint. The name you choose will be used as the cluster name across InfraWatch.
+              Point InfraWatch at an NQRust Hypervisor manager. The name you choose will be used as the cluster name across InfraWatch.
             </SheetDescription>
           </SheetHeader>
 
           {wizardStep === 2 && (
             <div className="p-4 space-y-4">
+              <Accordion type="single" collapsible className="rounded-md border border-border bg-muted/30">
+                <AccordionItem value="tutorial" className="border-b-0">
+                  <AccordionTrigger className="px-3 py-3 text-sm font-medium hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      First time? See how to set this up
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-4 space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Terminal className="h-4 w-4 text-primary" />
+                        1. Enable rancher-monitoring on your hypervisor
+                      </div>
+                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                        <li>Open the NQRust Hypervisor console and go to <span className="font-medium text-foreground">Advanced → Add-ons</span>.</li>
+                        <li>Click <code className="rounded bg-muted px-1 py-0.5 font-mono">rancher-monitoring</code> (it starts as <span className="font-medium">Disabled</span>).</li>
+                        <li>Open the <span className="font-medium text-foreground">⋮</span> menu and choose <span className="font-medium text-foreground">Enable</span>. Wait for <span className="font-medium">Deploy Successful</span>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="space-y-2 border-t border-border pt-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Terminal className="h-4 w-4 text-primary" />
+                        2. Copy the Prometheus URL
+                      </div>
+                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                        <li>On the rancher-monitoring add-on, click the <span className="font-medium text-foreground">Prometheus</span> tab.</li>
+                        <li>Click the external-link icon next to <span className="font-medium text-foreground">Prometheus Graph</span> — a new tab opens the Prometheus UI through the Rancher proxy.</li>
+                        <li>Copy the URL from the address bar, up to and including <code className="rounded bg-muted px-1 py-0.5 font-mono">/proxy</code>. Strip anything after it.</li>
+                      </ol>
+                      <div className="rounded bg-muted/60 p-2 font-mono text-[11px] break-all space-y-1">
+                        <div className="text-muted-foreground not-italic">Format:</div>
+                        <div>https://&lt;host&gt;/k8s/clusters/local/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy</div>
+                        <div className="text-muted-foreground pt-1 not-italic">Example:</div>
+                        <div>https://192.168.18.230/k8s/clusters/local/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-border pt-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <KeyRound className="h-4 w-4 text-primary" />
+                        3. Create an Access Key &amp; Secret Key
+                      </div>
+                      <ol className="text-xs text-muted-foreground space-y-1 list-decimal pl-4">
+                        <li>Click your admin avatar (top-right) → <span className="font-medium text-foreground">Account &amp; API Keys</span>.</li>
+                        <li>Click <span className="font-medium text-foreground">Create API Key</span>. Set a description (e.g. <code className="rounded bg-muted px-1 py-0.5 font-mono">infrawatch-readonly</code>), leave Scope as <code className="rounded bg-muted px-1 py-0.5 font-mono">No Scope</code>, choose an expiry (<code className="rounded bg-muted px-1 py-0.5 font-mono">Never</code> works for a long-lived connector).</li>
+                        <li>Click <span className="font-medium text-foreground">Create</span>. Copy the <span className="font-medium">Access Key</span> and <span className="font-medium">Secret Key</span> immediately — the Secret Key is shown only once.</li>
+                      </ol>
+                      <div className="rounded bg-muted/60 p-2 space-y-1 text-xs">
+                        <div className="font-medium text-foreground">Bearer mode (recommended)</div>
+                        <div className="text-muted-foreground">Combine with a colon: <code className="rounded bg-muted px-1 py-0.5 font-mono">&lt;access_key&gt;:&lt;secret_key&gt;</code> and paste into the Bearer Token field.</div>
+                        <div className="font-mono text-[11px] break-all pt-1">Example: token-f56kh:j8qkrvgqllj...</div>
+                      </div>
+                      <div className="rounded bg-muted/60 p-2 space-y-1 text-xs">
+                        <div className="font-medium text-foreground">Basic mode</div>
+                        <div className="text-muted-foreground">Set <span className="font-medium">Auth Mode</span> to <span className="font-medium">Basic</span>, then use the Access Key as username and the Secret Key as password.</div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Credentials are encrypted at rest with AES-256-GCM. Enable <span className="font-medium">Insecure TLS</span> below if the hypervisor uses a self-signed certificate.
+                      </p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
               <div className="grid gap-2">
                 <Label htmlFor="connector-name">Cluster Name</Label>
                 <Input
@@ -449,14 +491,16 @@ export default function ConnectorsPage() {
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="connector-url">Prometheus URL</Label>
+                <Label htmlFor="connector-url">Hypervisor Prometheus URL</Label>
                 <Input
                   id="connector-url"
-                  placeholder="https://rancher.example.com/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy"
+                  placeholder="https://<host>/k8s/clusters/local/api/v1/namespaces/cattle-monitoring-system/services/http:rancher-monitoring-prometheus:9090/proxy"
                   value={form.baseUrl}
                   onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
                 />
-                <p className="text-xs text-muted-foreground">Rancher monitoring Prometheus proxy endpoint.</p>
+                <p className="text-xs text-muted-foreground">
+                  The Rancher proxy URL ending in <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/proxy</code>. See the guide above if unsure.
+                </p>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -484,21 +528,29 @@ export default function ConnectorsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bearer">Bearer</SelectItem>
-                    <SelectItem value="basic">Basic</SelectItem>
-                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="bearer">Bearer token (recommended)</SelectItem>
+                    <SelectItem value="basic">Basic auth (username + password)</SelectItem>
+                    <SelectItem value="none">None (no authentication)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Use <span className="font-medium">Bearer</span> for production hypervisors. Disable auth only for internal lab clusters.
+                </p>
               </div>
 
               {form.authMode === "bearer" && (
                 <div className="grid gap-2">
-                  <Label>Bearer Token</Label>
+                  <Label htmlFor="bearer-token">Bearer Token</Label>
                   <Input
+                    id="bearer-token"
                     type="password"
+                    placeholder="Paste the API token from your hypervisor"
                     value={form.bearerToken}
                     onChange={(e) => setForm((prev) => ({ ...prev, bearerToken: e.target.value }))}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Encrypted at rest with AES-256-GCM. See the guide above to generate one.
+                  </p>
                 </div>
               )}
 

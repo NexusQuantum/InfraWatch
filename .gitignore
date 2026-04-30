@@ -18,6 +18,7 @@ node_modules
 tsconfig.tsbuildinfo
 .data/
 prome.md
+KEYs.md
 
 # Installer build artifacts
 installer/target/

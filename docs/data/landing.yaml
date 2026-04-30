@@ -1,0 +1,97 @@
+# Template blocks require a 'weight' so they're ordered on the landing page.
+
+# Hero
+hero:
+  enable: true
+  weight: 10
+  template: hero
+
+  # backgroundImage:
+  #   path: "images/templates/hero"
+  #   filename:
+  #     desktop: "gradient-desktop.webp"
+  #     mobile: "gradient-mobile.webp"
+
+  badge:
+    text: v0.1.0
+    color: warning # orange-like, matches the NQ brand
+    pill: false
+    soft: true
+
+  # Logo displayed next to the title (small). The user will drop the final
+  # InfraWatch hero logo here — for now the NQ mark stands in.
+  # titleLogo:
+  #   path: "images/logos"
+  #   filename: "logo.png"
+  #   alt: "InfraWatch Logo"
+  #   height: 80px
+
+  title: "InfraWatch"
+  subtitle: Modern **hypervisor observability** platform focused on NQRust Hypervisor fleets across every datacenter, with a **single dashboard**, alerts, drill-down, and a **production-grade TUI installer**.
+
+  # Large logo/image displayed on the RIGHT of the hero. Swap
+  # `hero-logo.png` at `assets/images/logos/hero-logo.png` for the official
+  # InfraWatch artwork when ready.
+  image:
+    path: "images/logos"
+    filename: "hero-logo.png"
+    alt: "InfraWatch Logo"
+    boxShadow: false
+    rounded: false
+
+  ctaButton:
+    icon: rocket_launch
+    btnText: "Get Started"
+    url: "/docs/getting-started/installation/"
+  cta2Button:
+    icon: home
+    btnText: "Nexus Quantum"
+    url: "https://nexusquantum.id"
+
+  info: "**Self-hosted** • Built by Nexus Quantum Tech"
+
+# Feature Grid
+featureGrid:
+  enable: true
+  weight: 20
+  template: feature grid
+
+  title: Why InfraWatch?
+  subtitle: A complete NQRust Hypervisor observability platform. Combines a real-time UI, threshold alerting, and a production-grade Rust TUI installer — all self-hosted, no SaaS lock-in.
+
+  items:
+    - title: Hypervisor Connector
+      icon: hub
+      description: Connect InfraWatch to your NQRust Hypervisor metrics endpoint and aggregate hosts, clusters, and VMs across datacenters into one dashboard.
+
+    - title: Real-Time Overview
+      icon: dashboard
+      description: Fleet-wide health across clusters, hosts, storage, and applications. SWR-polled UI with 30s refresh and instant drill-down.
+
+    - title: Host & VM Drill-Down
+      icon: memory
+      description: Per-server CPU, memory, disk, network, load averages, and uptime — plus NQRust VM inventory per host.
+
+    - title: Threshold Alerting
+      icon: notifications_active
+      description: Alert rules with batched evaluation every 60 seconds. Auto-resolve when metrics recover. 30-day retention with automatic purge.
+
+    - title: Historical Charts
+      icon: timeline
+      description: Time-series CPU, memory, and network with configurable time ranges backed by Prometheus range queries.
+
+    - title: Connector Health
+      icon: health_and_safety
+      description: Latency tracking, TLS options, and flexible auth — none, basic, or bearer — credentials encrypted at rest.
+
+    - title: Secure by Default
+      icon: lock
+      description: Scrypt-hashed admin, CSRF, rate-limited login, optional SAML/OAuth SSO, and a full audit log.
+
+    - title: REST API
+      icon: api
+      description: Every action is API-accessible. Full reference for connectors, alerts, live data, Prometheus proxy, and license endpoints.
+
+    - title: TUI Installer
+      icon: terminal
+      description: Rust + Ratatui installer with online and airgap modes, interactive or non-interactive. Bootstraps Linux hosts end-to-end with PostgreSQL and systemd.

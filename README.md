@@ -8,7 +8,7 @@
   <strong>Infrastructure Observability Dashboard</strong> by <a href="https://nexusquantum.id">Nexus Quantum Tech</a>
 </p>
 
-A production-grade, multi-connector monitoring dashboard that aggregates metrics from Prometheus instances, Kubernetes clusters, and hypervisors across multiple datacenters into a single unified UI.
+A production-grade monitoring dashboard focused on NQRust Hypervisor telemetry across datacenters.
 
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
 ![React 19](https://img.shields.io/badge/React-19-blue)
@@ -20,11 +20,11 @@ A production-grade, multi-connector monitoring dashboard that aggregates metrics
 
 ## Features
 
-- **Multi-Connector Aggregation** — connect to multiple Prometheus, Kubernetes, and NQRust Hypervisor instances simultaneously
+- **NQRust Hypervisor Focus** — purpose-built for `nqrust_hypervisor` sources
 - **Fleet Overview** — real-time health summary across all clusters, hosts, storage, and applications
 - **Host Monitoring** — per-server CPU, memory, disk, network, load averages, disk I/O, and uptime
-- **Cluster Views** — compute clusters, storage clusters, Kubernetes clusters with drill-down
-- **VM Monitoring** — KubeVirt virtual machine inventory and resource allocation per host
+- **Cluster Views** — compute and storage cluster drill-down
+- **VM Monitoring** — NQRust virtual machine inventory and resource allocation per host
 - **Alerting** — threshold-based alert rules with batched evaluation and automatic resolution
 - **Time-Series Charts** — historical CPU, memory, network with configurable time ranges
 - **Connector Health** — latency tracking, auth support (none/basic/bearer), TLS options
@@ -209,7 +209,7 @@ InfraWatch auto-creates all required tables on first startup:
 - `admin_user` — admin credentials (scrypt-hashed)
 - `sessions` — session tokens (30-day expiry)
 - `login_attempts` — rate limiting (5 failed/15 min)
-- `connectors` — Prometheus/K8s/Hypervisor data sources
+- `connectors` — NQRust Hypervisor data sources
 - `connector_health` — health check history
 - `alert_rules` — alert rule definitions
 - `alerts` — fired alerts with auto-retention (30 days)
@@ -219,9 +219,7 @@ InfraWatch auto-creates all required tables on first startup:
 
 | Type                  | Description                           | Metrics                                         |
 |-----------------------|---------------------------------------|--------------------------------------------------|
-| `generic_prometheus`  | Standard Prometheus instance          | Host, cluster, storage, app metrics              |
 | `nqrust_hypervisor`   | NQRust MicroVM Hypervisor             | Host + VM metrics via embedded Prometheus        |
-| `kubernetes_cluster`  | Kubernetes API + kube-state-metrics   | Pods, deployments, namespaces, resource usage    |
 
 ---
 

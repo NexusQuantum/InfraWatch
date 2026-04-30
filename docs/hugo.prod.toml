@@ -1,0 +1,81 @@
+# Production configuration.
+# baseURL is set dynamically by CI using --baseURL flag.
+
+defaultContentLanguage = 'en'
+defaultContentLanguageInSubdir = false
+enableEmoji = true
+enableGitInfo = false
+
+[languages]
+  [languages.en]
+    title = 'InfraWatch Documentation'
+    languageName = 'English'
+    languageCode = 'en-us'
+    contentDir = 'content'
+    weight = 10
+  [languages.id]
+    title = 'Dokumentasi InfraWatch'
+    languageName = 'Bahasa Indonesia'
+    languageCode = 'id'
+    contentDir = 'content/id'
+    weight = 20
+
+[module]
+  [module.hugoVersion]
+    extended = true
+    min = "0.100.0"
+  [[module.imports]]
+    path = "github.com/colinwilson/lotusdocs"
+    disable = false
+  [[module.imports]]
+    path = "github.com/gohugoio/hugo-mod-bootstrap-scss/v5"
+    disable = false
+
+[params]
+  description = "Infrastructure observability dashboard for NQRust Hypervisor fleets"
+  google_fonts = [
+    ["Inter", "300, 400, 600, 700"],
+    ["Fira Code", "500, 700"]
+  ]
+  sans_serif_font = "Inter"
+  secondary_font = "Inter"
+  mono_font = "Fira Code"
+  custom_css = ["css/toc-collapse.css", "css/infrawatch-theme.css"]
+  custom_js = ["js/toc-collapse.js"]
+
+[params.docs]
+  title = "InfraWatch Docs"
+  pathName = "docs"
+  themeColor = "orange"
+  darkMode = true
+  prism = true
+  prismTheme = "lotusdocs"
+  tableOfContents = true
+  scrollSpy = true
+
+[params.plausible]
+  enable = false
+
+[params.social]
+  # GitHub link intentionally removed.
+
+[menu]
+  [[menu.primary]]
+    name = "Docs"
+    url = "/docs/introduction/"
+    weight = 10
+  [[menu.primary]]
+    name = "Getting Started"
+    url = "/docs/getting-started/"
+    weight = 20
+  [[menu.primary]]
+    name = "API Reference"
+    url = "/docs/api-reference/"
+    weight = 30
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.highlight]
+    style = 'monokai'

@@ -1,0 +1,8 @@
+/* Minimal collapse rules for the right-side TOC. */
+.td-toc .collapse-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.td-toc ul ul {
+  margin-left: 0.5rem;
+}
